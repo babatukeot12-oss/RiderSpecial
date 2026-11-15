@@ -56,7 +56,6 @@ fun CaptainSmartApp() {
     val db = remember { FirebaseFirestore.getInstance() }
     val rtdb = remember { FirebaseDatabase.getInstance().reference }
 
-    // हार्डवेयर Device ID लॉक (एक फ़ोन पर एक ही बार 24-घंटे का फ्री डेमो)
     val deviceId = remember {
         Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown_device"
     }
@@ -256,8 +255,8 @@ fun RiderDashboard(
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
-    var tabIndex by remember { mutableIntStateOf(0) }
-    var expiry by remember { mutableLongStateOf(prefs.getLong("sub_expiry", 0L)) }
+    var tabIndex by remember { mutableStateOf(0) }
+    var expiry by remember { mutableStateOf(prefs.getLong("sub_expiry", 0L)) }
     var planName by remember { mutableStateOf("लोड हो रहा है...") }
     var announcement by remember { mutableStateOf("Captain Smart में आपका स्वागत है!") }
     var qrBase64 by remember { mutableStateOf("") }
@@ -341,7 +340,7 @@ fun RiderDashboard(
                                     )
                                     Text(
                                         if (isSubscribed) "वैधता: ${SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(expiry))}"
-                                        else "Auto-Accept चालू रखने के लिए ₹49 (30 दिन) का प्लान लें।",
+                                        else "Auto-Accept चालू रखने के लिए ₹49 (30 दिन) का प्लान लें。",
                                         fontSize = 13.sp,
                                         color = Color.DarkGray
                                     )
@@ -653,7 +652,7 @@ fun AdminDashboard(
     onLogout: () -> Unit
 ) {
     val context = LocalContext.current
-    var adminTab by remember { mutableIntStateOf(0) }
+    var adminTab by remember { mutableStateOf(0) }
     val payments = remember { mutableStateListOf>() }
     var generatedCode by remember { mutableStateOf("") }
     var newAnnouncement by remember { mutableStateOf("") }
