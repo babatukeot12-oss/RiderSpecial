@@ -73,7 +73,6 @@ fun CaptainSmartProApp() {
     var showSplash by remember { mutableStateOf(true) }
     var loggedInPhone by remember { mutableStateOf(prefs.getString("user_phone", "") ?: "") }
     var isAdmin by remember { mutableStateOf(prefs.getBoolean("is_admin", false)) }
-    var adminViewMode by remember { mutableStateOf(prefs.getString("admin_view_mode", "RIDER") ?: "RIDER") }
 
     LaunchedEffect(Unit) {
         delay(1500)
@@ -83,39 +82,15 @@ fun CaptainSmartProApp() {
     if (showSplash) {
         SplashScreen()
     } else if (loggedInPhone.isEmpty()) {
-        LoginScreen(prefs = prefs) { phone, admin ->
+        LoginScreen(prefs = prefs, db = db) { phone, admin ->
             loggedInPhone = phone
             isAdmin = admin
         }
     } else if (isAdmin) {
-        Column(Modifier.fillMaxSize().background(Color(0xFF0F172A))) {
-            Row(
-                Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(8.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Button(onClick = { adminViewMode = "RIDER"; prefs.edit().putString("admin_view_mode", "RIDER").apply() },
-                    colors = ButtonDefaults.buttonColors(containerColor = if (adminViewMode == "RIDER") Color(0xFF22C55E) else Color(0xFF334155))) {
-                    Text("🏍️ Rider View", color = if (adminViewMode == "RIDER") Color.Black else Color.White, fontWeight = FontWeight.Bold)
-                }
-                Button(onClick = { adminViewMode = "ADMIN"; prefs.edit().putString("admin_view_mode", "ADMIN").apply() },
-                    colors = ButtonDefaults.buttonColors(containerColor = if (adminViewMode == "ADMIN") Color(0xFF38BDF8) else Color(0xFF334155))) {
-                    Text("🛠️ Admin Panel", color = if (adminViewMode == "ADMIN") Color.Black else Color.White, fontWeight = FontWeight.Bold)
-                }
-            }
-            if (adminViewMode == "ADMIN") {
-                AdminDashboard(db = db, rtdb = rtdb) {
-                    prefs.edit().clear().apply()
-                    loggedInPhone = ""
-                    isAdmin = false
-                }
-            } else {
-                RiderDashboard(phone = "ADMIN_USER", db = db, rtdb = rtdb) {
-                    prefs.edit().clear().apply()
-                    loggedInPhone = ""
-                    isAdmin = false
-                }
-            }
+        AdminDashboard(db = db, rtdb = rtdb) {
+            prefs.edit().clear().apply()
+            loggedInPhone = ""
+            isAdmin = false
         }
     } else {
         RiderDashboard(phone = loggedInPhone, db = db, rtdb = rtdb) {
@@ -140,7 +115,7 @@ fun SplashScreen() {
 }
 
 @Composable
-fun LoginScreen(prefs: android.content.SharedPreferences, onLoginSuccess: (String, Boolean) -> Unit) {
+fun LoginScreen(prefs: android.content.SharedPreferences, db: FirebaseFirestore, onLoginSuccess: (String, Boolean) -> Unit) {
     val context = LocalContext.current
     var phone by remember { mutableStateOf("") }
     var vehicle by remember { mutableStateOf("Bike 🏍️") }
@@ -180,6 +155,12 @@ fun LoginScreen(prefs: android.content.SharedPreferences, onLoginSuccess: (Strin
                         if (phone.length == 10) {
                             val expiry = System.currentTimeMillis() + 86400000L * 7
                             prefs.edit().putString("user_phone", phone).putBoolean("is_admin", false).putLong("sub_expiry", expiry).apply()
+                            
+                            // Save rider profile to Firestore
+                            db.collection("riders").document(phone).set(
+                                mapOf("phone" to phone, "vehicle" to vehicle, "expiry" to expiry)
+                            )
+
                             Toast.makeText(context, "Login Successful!", Toast.LENGTH_SHORT).show()
                             onLoginSuccess(phone, false)
                         } else {
@@ -201,6 +182,7 @@ fun LoginScreen(prefs: android.content.SharedPreferences, onLoginSuccess: (Strin
                     Button(onClick = {
                         if (pin == "9954") {
                             prefs.edit().putBoolean("is_admin", true).apply()
+                            Toast.makeText(context, "Welcome Admin!", Toast.LENGTH_SHORT).show()
                             onLoginSuccess("ADMIN", true)
                         } else {
                             Toast.makeText(context, "Wrong PIN", Toast.LENGTH_SHORT).show()
@@ -247,6 +229,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                 upi = doc.getString("upiId") ?: "dinakeot@upi"
             }
         }
+        rtdb.child("live_riders").child(phone).setValue(mapOf("phone" to phone, "time" to System.currentTimeMillis()))
     }
 
     Scaffold(
@@ -258,7 +241,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
         },
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF1E293B)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("Bidding", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, label = { Text("Bidding", color = Color.White) }, icon = {})
                 NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("₹49 Plan", color = Color.White) }, icon = {})
                 NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Refer", color = Color.White) }, icon = {})
                 NavigationBarItem(selected = tab == 3, onClick = { tab == 3 }, label = { Text("Support", color = Color.White) }, icon = {})
@@ -427,6 +410,8 @@ fun ChatScreen(phone: String, isAdmin: Boolean, rtdb: DatabaseReference) {
 fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
     val payments = remember { mutableStateListOf<Triple<String, String, String>>() }
+    val riders = remember { mutableStateListOf<RiderModel>() }
+    val liveRiders = remember { mutableStateListOf>() }
     val context = LocalContext.current
     var chatPhone by remember { mutableStateOf("") }
     var activeChat by remember { mutableStateOf("") }
@@ -450,6 +435,22 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                 payments.add(Triple(it.id, it.getString("phone") ?: "", it.getString("receiptBase64") ?: ""))
             }
         }
+        db.collection("riders").addSnapshotListener { snap, _ ->
+            riders.clear()
+            snap?.documents?.forEach {
+                riders.add(RiderModel(it.getString("phone") ?: "", it.getString("vehicle") ?: "", it.getString("profilePic") ?: "", it.getString("vehiclePic") ?: "", it.getLong("expiry") ?: 0L))
+            }
+        }
+        rtdb.child("live_riders").addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                liveRiders.clear()
+                for (child in snapshot.children) {
+                    val map = child.value as? Map<String, Any>
+                    if (map != null) liveRiders.add(map)
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
     }
 
     Scaffold(
@@ -463,7 +464,9 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
             NavigationBar(containerColor = Color(0xFF1E293B)) {
                 NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("Payments", color = Color.White) }, icon = {})
                 NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("QR", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Chat", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Profiles", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 3, onClick = { tab == 3 }, label = { Text("GPS", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 4, onClick = { tab == 4 }, label = { Text("Chat", color = Color.White) }, icon = {})
             }
         }
     ) { pad ->
@@ -484,10 +487,12 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                                     }
                                     Spacer(Modifier.height(8.dp))
                                     Button(onClick = {
+                                        val newExp = System.currentTimeMillis() + 86400000L * 30
+                                        db.collection("riders").document(ph).update("expiry", newExp)
                                         db.collection("payments").document(id).update("status", "approved")
-                                        Toast.makeText(context, "Payment Approved!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Approved 30 Days!", Toast.LENGTH_SHORT).show()
                                     }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
-                                        Text("Approve Payment", color = Color.Black)
+                                        Text("Approve 30 Days Plan", color = Color.Black)
                                     }
                                 }
                             }
@@ -500,6 +505,48 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                     }
                 }
                 2 -> {
+                    LazyColumn(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        item { Text("👥 Registered Rider Profiles", color = Color.White, fontWeight = FontWeight.Bold) }
+                        if (riders.isEmpty()) item { Text("No riders registered yet.", color = Color.White) }
+                        items(riders) { r ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Text("Phone: ${r.phone} | Vehicle: ${r.vehicle}", fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Spacer(Modifier.height(8.dp))
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                        Button(onClick = {
+                                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${r.phone}"))
+                                            context.startActivity(intent)
+                                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                                            Text("📞 Call", color = Color.Black, fontSize = 11.sp)
+                                        }
+                                        Button(onClick = {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/91${r.phone}"))
+                                            context.startActivity(intent)
+                                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+                                            Text("💬 WhatsApp", color = Color.Black, fontSize = 11.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                3 -> {
+                    LazyColumn(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item { Text("📍 Live Rider GPS Status", color = Color.White, fontWeight = FontWeight.Bold) }
+                        if (liveRiders.isEmpty()) item { Text("No active riders online.", color = Color.White) }
+                        items(liveRiders) { rider ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Text("Phone: ${rider["phone"]}", fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Text("Status: Online & Active", color = Color(0xFF16A34A), fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+                4 -> {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
