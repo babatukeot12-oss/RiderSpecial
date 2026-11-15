@@ -59,8 +59,8 @@ object AppStrings {
     val texts = mapOf(
         "EN" to mapOf(
             "title" to "Captain Smart Pro",
-            "subtitle" to "Multi-Vehicle • Bidding & Live Support",
-            "login_title" to "Rider & Driver Portal",
+            "subtitle" to "Multi-Vehicle • Verified Rider Portal",
+            "login_title" to "Rider & Driver Login",
             "phone_hint" to "10-digit Mobile Number",
             "send_otp" to "Send OTP",
             "otp_hint" to "Enter 4-digit OTP",
@@ -68,15 +68,14 @@ object AppStrings {
             "select_vehicle" to "Select Your Vehicle Type:",
             "admin_btn" to "Admin Control Panel",
             "auto_accept_tab" to "Auto-Accept",
-            "bidding_tab" to "Ride Bidding",
             "recharge_tab" to "₹49 Plan",
             "refer_tab" to "Refer & Earn",
             "chat_tab" to "Live Support"
         ),
         "HI" to mapOf(
             "title" to "कैप्टन स्मार्ट प्रो",
-            "subtitle" to "मल्टी-वेहिकल • बिडिंग और लाइव सपोर्ट",
-            "login_title" to "राइडर और ड्राइवर पोर्टल",
+            "subtitle" to "मल्टी-वेहिकल • वेरिफाइड राइडर पोर्टल",
+            "login_title" to "राइडर और ड्राइवर लॉगिन",
             "phone_hint" to "10 अंकों का मोबाइल नंबर",
             "send_otp" to "OTP भेजें",
             "otp_hint" to "4-अंकों का OTP दर्ज करें",
@@ -84,7 +83,6 @@ object AppStrings {
             "select_vehicle" to "अपनी गाड़ी चुनें:",
             "admin_btn" to "एडमिन कंट्रोल पैनल",
             "auto_accept_tab" to "ऑटो-एक्सेप्ट",
-            "bidding_tab" to "राइड बिडिंग",
             "recharge_tab" to "₹49 प्लान",
             "refer_tab" to "रेफर और अर्न",
             "chat_tab" to "लाइव सहायता"
@@ -288,7 +286,6 @@ fun LoginScreen(deviceId: String, db: FirebaseFirestore, currentLang: String, on
                                 val userRef = db.collection("riders").document(phone)
                                 userRef.get().addOnSuccessListener { doc ->
                                     val now = System.currentTimeMillis()
-                                    // Referral logic: New user gets 6 days trial if referred, else 24 hours
                                     val defaultTrial = if (referralCode.isNotEmpty()) (6L * 24L * 3600000L) else (24L * 3600000L)
                                     val expiry = if (doc.exists()) doc.getLong("expiry") ?: (now + defaultTrial) else (now + defaultTrial)
 
@@ -298,7 +295,6 @@ fun LoginScreen(deviceId: String, db: FirebaseFirestore, currentLang: String, on
                                         "deviceId" to deviceId, "expiry" to expiry, "plan" to "Active / Trial"
                                     )
                                     userRef.set(data).addOnSuccessListener {
-                                        // If valid referral, give 5 days bonus to the referrer
                                         if (referralCode.isNotEmpty() && referralCode != phone) {
                                             val referrerRef = db.collection("riders").document(referralCode)
                                             referrerRef.get().addOnSuccessListener { refDoc ->
@@ -349,7 +345,6 @@ fun RiderDashboard(
     var upiId by remember { mutableStateOf("dinakeot@upi") }
     var autoEnabled by remember { mutableStateOf(prefs.getBoolean("auto_accept_enabled", false)) }
 
-    // Bidding states
     var pickupKm by remember { mutableStateOf("2.0") }
     var dropKm by remember { mutableStateOf("5.0") }
     var bidAmount by remember { mutableStateOf("150") }
@@ -408,9 +403,9 @@ fun RiderDashboard(
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(selected = tabIndex == 0, onClick = { tabIndex = 0 }, label = { Text(AppStrings.get(currentLang, "auto_accept_tab")) }, icon = {})
-                NavigationBarItem(selected = tabIndex == 1, onClick = { tabIndex = 1 }, label = { Text(AppStrings.get(currentLang, "bidding_tab")) }, icon = {})
+                NavigationBarItem(selected = tabIndex == 1, onClick = { tabIndex = 1 }, label = { Text("Bidding") }, icon = {})
                 NavigationBarItem(selected = tabIndex == 2, onClick = { tabIndex = 2 }, label = { Text(AppStrings.get(currentLang, "recharge_tab")) }, icon = {})
-                NavigationBarItem(selected = tabIndex == 3, onClick = { tabIndex = 3 }, label = { Text(AppStrings.get(currentLang, "refer_tab")) }, icon = {})
+                NavigationBarItem(selected = tabIndex == 3, onClick = { tabIndex = 3 }, label = { Text("Refer") }, icon = {})
                 NavigationBarItem(selected = tabIndex == 4, onClick = { tabIndex = 4 }, label = { Text(AppStrings.get(currentLang, "chat_tab")) }, icon = {})
             }
         }
@@ -446,17 +441,16 @@ fun RiderDashboard(
                     }
                 }
                 1 -> {
-                    // Ride Bidding Screen
                     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item {
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text("🎯 Custom Ride Bidding & Distance", fontWeight = FontWeight.Bold, color = Color(0xFF22C55E))
+                                    Text("🎯 Custom Ride Bidding", fontWeight = FontWeight.Bold, color = Color(0xFF22C55E))
                                     OutlinedTextField(value = pickupKm, onValueChange = { pickupKm = it }, label = { Text("Max Pickup Distance (Km)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                                     OutlinedTextField(value = dropKm, onValueChange = { dropKm = it }, label = { Text("Max Drop-off Distance (Km)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                                     OutlinedTextField(value = bidAmount, onValueChange = { bidAmount = it }, label = { Text("Your Bid Amount (₹)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                                     Button(onClick = {
-                                        Toast.makeText(context, "Bid Published for $pickupKm pickup / ₹$bidAmount!", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(context, "Bid Published!", Toast.LENGTH_LONG).show()
                                     }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
                                         Text("Publish Ride Request & Bid", color = Color.Black, fontWeight = FontWeight.Bold)
                                     }
@@ -467,7 +461,6 @@ fun RiderDashboard(
                 }
                 2 -> SubscriptionScreen(phone = phone, db = db, qrBase64 = qrBase64, upiId = upiId)
                 3 -> {
-                    // Refer & Earn Screen
                     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item {
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))) {
@@ -480,7 +473,7 @@ fun RiderDashboard(
                                         val shareIntent = Intent().apply {
                                             action = Intent.ACTION_SEND
                                             type = "text/plain"
-                                            putExtra(Intent.EXTRA_TEXT, "Join Captain Smart Pro using my number $phone as Referral Code to get 6 Days Free Trial! Download app now.")
+                                            putExtra(Intent.EXTRA_TEXT, "Join Captain Smart Pro using my number $phone as Referral Code to get 6 Days Free Trial!")
                                         }
                                         context.startActivity(Intent.createChooser(shareIntent, "Share via"))
                                     }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
@@ -668,9 +661,9 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, currentLang: 
             NavigationBar {
                 NavigationBarItem(selected = adminTab == 0, onClick = { adminTab = 0 }, label = { Text("Payments") }, icon = {})
                 NavigationBarItem(selected = adminTab == 1, onClick = { adminTab = 1 }, label = { Text("QR & Notice") }, icon = {})
-                NavigationBarItem(selected = adminTab == 2, onClick = { adminTab = 2 }, label = { Text("Rider Profiles") }, icon = {})
-                NavigationBarItem(selected = adminTab == 3, onClick = { adminTab = 3 }, label = { Text("Live GPS") }, icon = {})
-                NavigationBarItem(selected = adminTab == 4, onClick = { adminTab = 4 }, label = { Text("Chat") }, icon = {})
+                NavigationBarItem(selected = adminTab == 2, onClick = { adminTab = 2 }, label = { Text("Profiles") }, icon = {})
+                NavigationBarItem(selected = adminTab == 3, onClick = { adminTab = 3 }, label = { Text("GPS") }, icon = {})
+                NavigationBarItem(selected = adminTab == 4, onClick = { adminTab == 4 }, label = { Text("Chat") }, icon = {})
             }
         }
     ) { pad ->
@@ -678,7 +671,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, currentLang: 
             when (adminTab) {
                 0 -> {
                     LazyColumn(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (payments.isEmpty()) item { Text("No pending payment screenshots.", color = Color.Gray) }
+                        if (payments.isEmpty()) item { Text("No pending payments.", color = Color.Gray) }
                         items(payments) { item ->
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(14.dp)) {
@@ -710,12 +703,12 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, currentLang: 
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("1. Instant QR Code Updater", fontWeight = FontWeight.Bold)
                                     Button(onClick = { qrPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
-                                        Text("📷 Upload New QR Code (Instant Live)")
+                                        Text("📷 Upload New QR Code")
                                     }
                                     OutlinedTextField(value = newUpi, onValueChange = { newUpi = it }, label = { Text("UPI ID") }, modifier = Modifier.fillMaxWidth())
                                     Button(onClick = {
                                         db.collection("config").document("settings").set(mapOf("upiId" to newUpi), com.google.firebase.firestore.SetOptions.merge())
-                                        Toast.makeText(context, "UPI ID Saved!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "UPI Saved!", Toast.LENGTH_SHORT).show()
                                     }, modifier = Modifier.fillMaxWidth()) { Text("Save UPI ID") }
                                 }
                             }
@@ -736,7 +729,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, currentLang: 
                 }
                 2 -> {
                     LazyColumn(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        item { Text("👥 Registered Rider Profiles (Face & Vehicle Verification)", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                        item { Text("👥 Registered Rider Profiles", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
                         if (ridersList.isEmpty()) item { Text("No registered riders yet.", color = Color.Gray) }
                         items(ridersList) { rider ->
                             Card(Modifier.fillMaxWidth()) {
@@ -747,12 +740,12 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, currentLang: 
                                             Text("Vehicle: ${rider.vehicle}", color = Color(0xFF22C55E), fontSize = 12.sp)
                                         }
                                         val active = System.currentTimeMillis() < rider.expiry
-                                        Text(if (active) "✅ Plan Active" else "⚠️ Expired", fontSize = 11.sp, color = if (active) Color(0xFF16A34A) else Color.Red)
+                                        Text(if (active) "✅ Active" else "⚠️ Expired", fontSize = 11.sp, color = if (active) Color(0xFF16A34A) else Color.Red)
                                     }
                                     Spacer(Modifier.height(10.dp))
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("Rider Face Photo", fontSize = 10.sp, color = Color.Gray)
+                                            Text("Face Photo", fontSize = 10.sp, color = Color.Gray)
                                             Spacer(Modifier.height(4.dp))
                                             Box(modifier = Modifier.size(80.dp).clip(CircleShape).background(Color.DarkGray)) {
                                                 if (rider.profilePic.isNotEmpty()) {
@@ -781,14 +774,13 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, currentLang: 
                 }
                 3 -> {
                     LazyColumn(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item { Text("📍 Live Rider GPS Status", fontWeight = FontWeight.Bold) }
+                        item { Text("📍 Live GPS Status", fontWeight = FontWeight.Bold) }
                         if (liveRiders.isEmpty()) item { Text("No active riders online.", color = Color.Gray) }
                         items(liveRiders) { rider ->
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(12.dp)) {
-                                    Text("Rider Phone: ${rider["phone"]}", fontWeight = FontWeight.Bold)
+                                    Text("Phone: ${rider["phone"]}", fontWeight = FontWeight.Bold)
                                     Text("Vehicle: ${rider["vehicle"]}", color = Color(0xFF22C55E))
-                                    Text("Status: Online", fontSize = 12.sp, color = Color.Gray)
                                 }
                             }
                         }
