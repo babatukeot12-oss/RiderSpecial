@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "702552337417",
+    "project_id": "riderspecial-a2e83",
+    "storage_bucket": "riderspecial-a2e83.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:702552337417:android:17ee1722f87e7c022d1cd8",
+        "android_client_info": {
+          "package_name": "com.riderspecial.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAiiWC52HukkZH8RMF6VgGsh5wTvMB1qQk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
