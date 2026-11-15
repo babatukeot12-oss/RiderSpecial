@@ -16,7 +16,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.database.*
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.delay
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
@@ -46,14 +44,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = Color(0xFF22C55E),
+                    background = Color(0xFF0F172A),
+                    surface = Color(0xFF1E293B),
+                    onPrimary = Color.Black,
+                    onBackground = Color.White,
+                    onSurface = Color.White
+                )
+            ) {
                 CaptainSmartProApp()
             }
         }
     }
 }
 
-data class PaymentModel(val id: String = "", val phone: String = "", val receiptBase64: String = "")
 data class RiderModel(val phone: String = "", val vehicle: String = "", val profilePic: String = "", val vehiclePic: String = "", val expiry: Long = 0L)
 
 @SuppressLint("HardwareIds")
@@ -70,20 +76,19 @@ fun CaptainSmartProApp() {
     var adminViewMode by remember { mutableStateOf(prefs.getString("admin_view_mode", "RIDER") ?: "RIDER") }
 
     LaunchedEffect(Unit) {
-        delay(2000)
+        delay(1500)
         showSplash = false
     }
 
     if (showSplash) {
         SplashScreen()
     } else if (loggedInPhone.isEmpty()) {
-        LoginScreen(db = db) { phone, admin ->
-            prefs.edit().putString("user_phone", phone).putBoolean("is_admin", admin).apply()
+        LoginScreen(prefs = prefs) { phone, admin ->
             loggedInPhone = phone
             isAdmin = admin
         }
     } else if (isAdmin) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().background(Color(0xFF0F172A))) {
             Row(
                 Modifier.fillMaxWidth().background(Color(0xFF1E293B)).padding(8.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
@@ -129,44 +134,17 @@ fun SplashScreen() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("👑 Captain Smart Pro", color = Color(0xFF22C55E), fontSize = 28.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            Text("Multi-Vehicle Fleet & Direct Bidding", color = Color.LightGray, fontSize = 12.sp)
+            Text("Multi-Vehicle Fleet & Direct Bidding", color = Color.White, fontSize = 12.sp)
         }
     }
 }
 
 @Composable
-fun LoginScreen(db: FirebaseFirestore, onLoginSuccess: (String, Boolean) -> Unit) {
+fun LoginScreen(prefs: android.content.SharedPreferences, onLoginSuccess: (String, Boolean) -> Unit) {
     val context = LocalContext.current
     var phone by remember { mutableStateOf("") }
     var vehicle by remember { mutableStateOf("Bike 🏍️") }
-    var facePic by remember { mutableStateOf("") }
-    var vehPic by remember { mutableStateOf("") }
-    var referral by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
-
-    val facePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let {
-            val stream = context.contentResolver.openInputStream(it)
-            val bmp = BitmapFactory.decodeStream(stream)
-            val scaled = Bitmap.createScaledBitmap(bmp, 150, 150, true)
-            val out = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 60, out)
-            facePic = Base64.encodeToString(out.toByteArray(), Base64.DEFAULT)
-            Toast.makeText(context, "Face Photo Saved", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    val vehPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let {
-            val stream = context.contentResolver.openInputStream(it)
-            val bmp = BitmapFactory.decodeStream(stream)
-            val scaled = Bitmap.createScaledBitmap(bmp, 200, 150, true)
-            val out = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 60, out)
-            vehPic = Base64.encodeToString(out.toByteArray(), Base64.DEFAULT)
-            Toast.makeText(context, "Vehicle Photo Saved", Toast.LENGTH_SHORT).show()
-        }
-    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0F172A), Color(0xFF1E293B)))).padding(20.dp),
@@ -175,15 +153,10 @@ fun LoginScreen(db: FirebaseFirestore, onLoginSuccess: (String, Boolean) -> Unit
     ) {
         item {
             Text("Captain Smart Pro", color = Color(0xFF22C55E), fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text("Direct Login Portal", color = Color.LightGray, fontSize = 11.sp)
+            Text("Direct Instant Login", color = Color.White, fontSize = 11.sp)
             Spacer(Modifier.height(16.dp))
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))) {
                 Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
-                        Button(onClick = { facePicker.launch("image/*") }) { Text(if (facePic.isEmpty()) "👤 Face Photo" else "✅ Face Saved") }
-                        Button(onClick = { vehPicker.launch("image/*") }) { Text(if (vehPic.isEmpty()) "🏍️ Vehicle Pic" else "✅ Vehicle Saved") }
-                    }
-                    Spacer(Modifier.height(10.dp))
                     Text("Select Vehicle Type:", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -194,34 +167,22 @@ fun LoginScreen(db: FirebaseFirestore, onLoginSuccess: (String, Boolean) -> Unit
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(value = phone, onValueChange = { if (it.length <= 10) phone = it }, label = { Text("10-digit Mobile Number") }, singleLine = true)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(value = referral, onValueChange = { referral = it }, label = { Text("Referral Phone (Optional - 6 Days Free)") }, singleLine = true)
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { if (it.length <= 10) phone = it },
+                        label = { Text("10-digit Mobile Number", color = Color.White) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                    )
                     Spacer(Modifier.height(12.dp))
 
-                    // Direct Login Button (No OTP hassle)
+                    // Instant Local Login (Guaranteed to work without hanging)
                     Button(onClick = {
                         if (phone.length == 10) {
-                            val ref = db.collection("riders").document(phone)
-                            ref.get().addOnSuccessListener { doc ->
-                                val now = System.currentTimeMillis()
-                                val trialDays = if (referral.isNotEmpty()) 6L else 1L
-                                val expiry = if (doc.exists()) doc.getLong("expiry") ?: (now + trialDays * 86400000L) else (now + trialDays * 86400000L)
-                                val data = mapOf("phone" to phone, "vehicle" to vehicle, "profilePic" to facePic, "vehiclePic" to vehPic, "expiry" to expiry)
-                                ref.set(data).addOnSuccessListener {
-                                    if (referral.isNotEmpty() && referral != phone) {
-                                        db.collection("riders").document(referral).get().addOnSuccessListener { rDoc ->
-                                            if (rDoc.exists()) {
-                                                val refExp = rDoc.getLong("expiry") ?: now
-                                                val newRefExp = maxOf(refExp, now) + (5L * 86400000L)
-                                                db.collection("riders").document(referral).update("expiry", newRefExp)
-                                            }
-                                        }
-                                    }
-                                    Toast.makeText(context, "Login Successful!", Toast.LENGTH_SHORT).show()
-                                    onLoginSuccess(phone, false)
-                                }
-                            }
+                            val expiry = System.currentTimeMillis() + 86400000L * 7 // 7 Days Trial
+                            prefs.edit().putString("user_phone", phone).putBoolean("is_admin", false).putLong("sub_expiry", expiry).apply()
+                            Toast.makeText(context, "Login Successful!", Toast.LENGTH_SHORT).show()
+                            onLoginSuccess(phone, false)
                         } else {
                             Toast.makeText(context, "Enter valid 10-digit number", Toast.LENGTH_SHORT).show()
                         }
@@ -230,10 +191,23 @@ fun LoginScreen(db: FirebaseFirestore, onLoginSuccess: (String, Boolean) -> Unit
                     }
 
                     Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(value = pin, onValueChange = { pin = it }, label = { Text("Admin PIN (9954)") }, singleLine = true)
+                    OutlinedTextField(
+                        value = pin,
+                        onValueChange = { pin = it },
+                        label = { Text("Admin PIN (9954)", color = Color.White) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color.LightGray)
+                    )
                     Spacer(Modifier.height(6.dp))
-                    Button(onClick = { if (pin == "9954") onLoginSuccess("ADMIN", true) else Toast.makeText(context, "Wrong PIN", Toast.LENGTH_SHORT).show() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Open Admin Panel")
+                    Button(onClick = {
+                        if (pin == "9954") {
+                            prefs.edit().putBoolean("is_admin", true).apply()
+                            onLoginSuccess("ADMIN", true)
+                        } else {
+                            Toast.makeText(context, "Wrong PIN", Toast.LENGTH_SHORT).show()
+                        }
+                    }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8))) {
+                        Text("Open Admin Panel", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -244,13 +218,10 @@ fun LoginScreen(db: FirebaseFirestore, onLoginSuccess: (String, Boolean) -> Unit
 @Composable
 fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
-    var expiry by remember { mutableStateOf(0L) }
-    var vehicle by remember { mutableStateOf("Bike") }
     var qr by remember { mutableStateOf("") }
     var upi by remember { mutableStateOf("dinakeot@upi") }
     var receipt by remember { mutableStateOf("") }
 
-    // Rider Bidding Customization States
     var pickupKm by remember { mutableStateOf("2.0") }
     var dropKm by remember { mutableStateOf("5.0") }
     var bidAmount by remember { mutableStateOf("150") }
@@ -270,41 +241,28 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
         }
     }
 
-    LaunchedEffect(phone) {
-        if (phone != "ADMIN_USER") {
-            db.collection("riders").document(phone).addSnapshotListener { doc, _ ->
-                if (doc != null && doc.exists()) {
-                    expiry = doc.getLong("expiry") ?: 0L
-                    vehicle = doc.getString("vehicle") ?: "Bike"
-                }
-            }
-        } else {
-            expiry = System.currentTimeMillis() + 86400000L * 30
-        }
-        db.collection("config").document("settings").addSnapshotListener { doc, _ ->
+    LaunchedEffect(Unit) {
+        db.collection("config").document("settings").get().addOnSuccessListener { doc ->
             if (doc != null && doc.exists()) {
                 qr = doc.getString("qrBase64") ?: ""
                 upi = doc.getString("upiId") ?: "dinakeot@upi"
             }
         }
-        rtdb.child("live_riders").child(phone).setValue(mapOf("phone" to phone, "vehicle" to vehicle, "time" to System.currentTimeMillis()))
     }
-
-    val active = System.currentTimeMillis() < expiry
 
     Scaffold(
         topBar = {
             Row(Modifier.fillMaxWidth().background(Color(0xFF0F172A)).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Captain • $vehicle", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold)
+                Text("Captain • Active", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold)
                 Button(onClick = onLogout, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Logout", fontSize = 10.sp) }
             }
         },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, label = { Text("Bidding") }, icon = {})
-                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("₹49 Plan") }, icon = {})
-                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Refer") }, icon = {})
-                NavigationBarItem(selected = tab == 3, onClick = { tab == 3 }, label = { Text("Support") }, icon = {})
+            NavigationBar(containerColor = Color(0xFF1E293B)) {
+                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("Bidding", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("₹49 Plan", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Refer", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 3, onClick = { tab == 3 }, label = { Text("Support", color = Color.White) }, icon = {})
             }
         }
     ) { pad ->
@@ -313,10 +271,10 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                 0 -> {
                     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         item {
-                            Card(colors = CardDefaults.cardColors(containerColor = if (active) Color(0xFFDCFCE7) else Color(0xFFFEE2E2))) {
+                            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))) {
                                 Column(Modifier.padding(14.dp)) {
-                                    Text(if (active) "✅ Active Status: $vehicle" else "⚠️ Subscription Expired", fontWeight = FontWeight.Bold, color = Color.Black)
-                                    Text(if (active) "Nearest Dispatch & Auto-Accept Active" else "Renew ₹49 for unlimited priority rides.", fontSize = 11.sp, color = Color.DarkGray)
+                                    Text("✅ Active Status: Online", fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Text("Nearest Dispatch & Auto-Accept Active", fontSize = 11.sp, color = Color.DarkGray)
                                 }
                             }
                         }
@@ -324,9 +282,30 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("🎯 Custom Ride Bidding & Distance Control", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold)
-                                    OutlinedTextField(value = pickupKm, onValueChange = { pickupKm = it }, label = { Text("Max Pickup Distance (Km)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                                    OutlinedTextField(value = dropKm, onValueChange = { dropKm = it }, label = { Text("Max Drop-off Distance (Km)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                                    OutlinedTextField(value = bidAmount, onValueChange = { bidAmount = it }, label = { Text("Your Bid Amount (₹)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                                    OutlinedTextField(
+                                        value = pickupKm,
+                                        onValueChange = { pickupKm = it },
+                                        label = { Text("Max Pickup Distance (Km)", color = Color.White) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                                    )
+                                    OutlinedTextField(
+                                        value = dropKm,
+                                        onValueChange = { dropKm = it },
+                                        label = { Text("Max Drop-off Distance (Km)", color = Color.White) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                                    )
+                                    OutlinedTextField(
+                                        value = bidAmount,
+                                        onValueChange = { bidAmount = it },
+                                        label = { Text("Your Bid Amount (₹)", color = Color.White) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                                    )
                                     
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                         Text("0.00s Auto-Accept Engine", color = Color.White, fontSize = 13.sp)
@@ -427,11 +406,17 @@ fun ChatScreen(phone: String, isAdmin: Boolean, rtdb: DatabaseReference) {
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(value = msg, onValueChange = { msg = it }, modifier = Modifier.weight(1f), placeholder = { Text("Type message...") })
+            OutlinedTextField(
+                value = msg,
+                onValueChange = { msg = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Type message...", color = Color.LightGray) },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+            )
             Spacer(Modifier.width(6.dp))
             Button(onClick = {
                 if (msg.isNotBlank()) {
-                    rtdb.child("chats").child(phone).push().setValue(mapOf("sender" to if (isAdmin) "Admin" else phone, "text" to msg))
+                    rtdb.child("chats").child(phone).push().setValue(mapOf("sender" to if (isAdmin) "Admin" else phone, "text" tto msg))
                     msg = ""
                 }
             }) { Text("Send") }
@@ -443,7 +428,6 @@ fun ChatScreen(phone: String, isAdmin: Boolean, rtdb: DatabaseReference) {
 fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () -> Unit) {
     var tab by remember { mutableStateOf(0) }
     val payments = remember { mutableStateListOf<Triple<String, String, String>>() }
-    val riders = remember { mutableStateListOf<RiderModel>() }
     val context = LocalContext.current
     var chatPhone by remember { mutableStateOf("") }
     var activeChat by remember { mutableStateOf("") }
@@ -467,12 +451,6 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                 payments.add(Triple(it.id, it.getString("phone") ?: "", it.getString("receiptBase64") ?: ""))
             }
         }
-        db.collection("riders").addSnapshotListener { snap, _ ->
-            riders.clear()
-            snap?.documents?.forEach {
-                riders.add(RiderModel(it.getString("phone") ?: "", it.getString("vehicle") ?: "", it.getString("profilePic") ?: "", it.getString("vehiclePic") ?: "", it.getLong("expiry") ?: 0L))
-            }
-        }
     }
 
     Scaffold(
@@ -483,11 +461,10 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
             }
         },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("Payments") }, icon = {})
-                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("QR") }, icon = {})
-                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Profiles") }, icon = {})
-                NavigationBarItem(selected = tab == 3, onClick = { tab == 3 }, label = { Text("Chat") }, icon = {})
+            NavigationBar(containerColor = Color(0xFF1E293B)) {
+                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("Payments", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("QR", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Chat", color = Color.White) }, icon = {})
             }
         }
     ) { pad ->
@@ -495,11 +472,11 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
             when (tab) {
                 0 -> {
                     LazyColumn(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (payments.isEmpty()) item { Text("No pending payments.", color = Color.Gray) }
+                        if (payments.isEmpty()) item { Text("No pending payments.", color = Color.White) }
                         items(payments) { (id, ph, receiptB64) ->
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(12.dp)) {
-                                    Text("Phone: $ph", fontWeight = FontWeight.Bold)
+                                    Text("Phone: $ph", fontWeight = FontWeight.Bold, color = Color.Black)
                                     Spacer(Modifier.height(6.dp))
                                     if (receiptB64.isNotEmpty()) {
                                         val bytes = Base64.decode(receiptB64, Base64.DEFAULT)
@@ -508,12 +485,10 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                                     }
                                     Spacer(Modifier.height(8.dp))
                                     Button(onClick = {
-                                        val newExp = System.currentTimeMillis() + 86400000L * 30
-                                        db.collection("riders").document(ph).update("expiry", newExp)
                                         db.collection("payments").document(id).update("status", "approved")
-                                        Toast.makeText(context, "Approved 30 Days!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Payment Approved!", Toast.LENGTH_SHORT).show()
                                     }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
-                                        Text("Approve 30 Days Plan", color = Color.Black)
+                                        Text("Approve Payment", color = Color.Black)
                                     }
                                 }
                             }
@@ -526,63 +501,17 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                     }
                 }
                 2 -> {
-                    LazyColumn(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        item { Text("👥 Registered Rider Profiles (Face & Vehicle)", color = Color.White, fontWeight = FontWeight.Bold) }
-                        if (riders.isEmpty()) item { Text("No riders registered yet.", color = Color.Gray) }
-                        items(riders) { r ->
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text("Phone: ${r.phone} | Vehicle: ${r.vehicle}", fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.height(6.dp))
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
-                                        if (r.profilePic.isNotEmpty()) {
-                                            val b = Base64.decode(r.profilePic, Base64.DEFAULT)
-                                            val bmp = BitmapFactory.decodeByteArray(b, 0, b.size)
-                                            if (bmp != null) {
-                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                    Text("Face", fontSize = 10.sp, color = Color.Gray)
-                                                    Image(bitmap = bmp.asImageBitmap(), contentDescription = "", modifier = Modifier.size(60.dp).clip(CircleShape))
-                                                }
-                                            }
-                                        }
-                                        if (r.vehiclePic.isNotEmpty()) {
-                                            val b = Base64.decode(r.vehiclePic, Base64.DEFAULT)
-                                            val bmp = BitmapFactory.decodeByteArray(b, 0, b.size)
-                                            if (bmp != null) {
-                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                    Text("Vehicle", fontSize = 10.sp, color = Color.Gray)
-                                                    Image(bitmap = bmp.asImageBitmap(), contentDescription = "", modifier = Modifier.size(70.dp, 50.dp).clip(RoundedCornerShape(6.dp)))
-                                                }
-                                            }
-                                        }
-                                    }
-                                    Spacer(Modifier.height(8.dp))
-                                    // Direct Call & WhatsApp Action Buttons
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                        Button(onClick = {
-                                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${r.phone}"))
-                                            context.startActivity(intent)
-                                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
-                                            Text("📞 Call", color = Color.Black, fontSize = 11.sp)
-                                        }
-                                        Button(onClick = {
-                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/91${r.phone}"))
-                                            context.startActivity(intent)
-                                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
-                                            Text("💬 WhatsApp", color = Color.Black, fontSize = 11.sp)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                3 -> {
                     Column(Modifier.padding(12.dp)) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(value = chatPhone, onValueChange = { chatPhone = it }, label = { Text("Rider Phone Number") }, modifier = Modifier.weight(1f))
+                            OutlinedTextField(
+                                value = chatPhone,
+                                onValueChange = { chatPhone = it },
+                                label = { Text("Rider Phone Number", color = Color.White) },
+                                modifier = Modifier.weight(1f),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color.LightGray)
+                            )
                             Spacer(Modifier.width(8.dp))
-                            Button(onClick = { activeChat = chatPhone }) { Text("Open Chat") }
+                            Button(onClick = { activeChat = chatPhone }) { Text("Open") }
                         }
                         Spacer(Modifier.height(8.dp))
                         if (activeChat.isNotEmpty()) {
