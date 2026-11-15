@@ -176,10 +176,9 @@ fun LoginScreen(prefs: android.content.SharedPreferences, onLoginSuccess: (Strin
                     )
                     Spacer(Modifier.height(12.dp))
 
-                    // Instant Local Login (Guaranteed to work without hanging)
                     Button(onClick = {
                         if (phone.length == 10) {
-                            val expiry = System.currentTimeMillis() + 86400000L * 7 // 7 Days Trial
+                            val expiry = System.currentTimeMillis() + 86400000L * 7
                             prefs.edit().putString("user_phone", phone).putBoolean("is_admin", false).putLong("sub_expiry", expiry).apply()
                             Toast.makeText(context, "Login Successful!", Toast.LENGTH_SHORT).show()
                             onLoginSuccess(phone, false)
@@ -416,7 +415,7 @@ fun ChatScreen(phone: String, isAdmin: Boolean, rtdb: DatabaseReference) {
             Spacer(Modifier.width(6.dp))
             Button(onClick = {
                 if (msg.isNotBlank()) {
-                    rtdb.child("chats").child(phone).push().setValue(mapOf("sender" to if (isAdmin) "Admin" else phone, "text" tto msg))
+                    rtdb.child("chats").child(phone).push().setValue(mapOf("sender" to if (isAdmin) "Admin" else phone, "text" to msg))
                     msg = ""
                 }
             }) { Text("Send") }
