@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="Captain Smart 0.00s Auto-Accept Service"
+    android:notificationTimeout="50"
+    android:packageNames="com.rapido.rider,com.olacabs.oladriver,com.ubercab.driver,com.zomato.delivery,in.swiggy.deliveryapp" />
