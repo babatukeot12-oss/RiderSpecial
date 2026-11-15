@@ -48,6 +48,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+data class PaymentModel(
+    val id: String = "",
+    val phone: String = "",
+    val utr: String = "",
+    val receiptBase64: String = ""
+)
+
 @SuppressLint("HardwareIds")
 @Composable
 fun CaptainSmartApp() {
@@ -340,7 +347,7 @@ fun RiderDashboard(
                                     )
                                     Text(
                                         if (isSubscribed) "वैधता: ${SimpleDateFormat("dd MMM, hh:mm a", Locale.getDefault()).format(Date(expiry))}"
-                                        else "Auto-Accept चालू रखने के लिए ₹49 (30 दिन) का प्लान लें。",
+                                        else "Auto-Accept चालू रखने के लिए ₹49 (30 दिन) का प्लान लें।",
                                         fontSize = 13.sp,
                                         color = Color.DarkGray
                                     )
@@ -653,7 +660,7 @@ fun AdminDashboard(
 ) {
     val context = LocalContext.current
     var adminTab by remember { mutableStateOf(0) }
-    val payments = remember { mutableStateListOf>() }
+    val payments = remember { mutableStateListOf<PaymentModel>() }
     var generatedCode by remember { mutableStateOf("") }
     var newAnnouncement by remember { mutableStateOf("") }
     var newUpi by remember { mutableStateOf("dinakeot@upi") }
@@ -680,9 +687,13 @@ fun AdminDashboard(
             .addSnapshotListener { snap, _ ->
                 payments.clear()
                 snap?.documents?.forEach { doc ->
-                    val map = doc.data?.toMutableMap() ?: mutableMapOf()
-                    map["id"] = doc.id
-                    payments.add(map)
+                    val p = PaymentModel(
+                        id = doc.id,
+                        phone = doc.getString("phone") ?: "",
+                        utr = doc.getString("utr") ?: "",
+                        receiptBase64 = doc.getString("receiptBase64") ?: ""
+                    )
+                    payments.add(p)
                 }
             }
     }
@@ -714,10 +725,10 @@ fun AdminDashboard(
                             item { Text("कोई पेंडिंग पेमेंट नहीं है।", color = Color.Gray) }
                         }
                         items(payments) { item ->
-                            val docId = item["id"].toString()
-                            val rPhone = item["phone"].toString()
-                            val utr = item["utr"].toString()
-                            val rImg = item["receiptBase64"]?.toString() ?: ""
+                            val docId = item.id
+                            val rPhone = item.phone
+                            val utr = item.utr
+                            val rImg = item.receiptBase64
 
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(14.dp)) {
@@ -808,8 +819,7 @@ fun AdminDashboard(
                                         value = newAnnouncement,
                                         onValueChange = { newAnnouncement = it },
                                         label = { Text("नोटिस / ऑफर लिखें") },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                        modifier = Modifier.fillMaxWidth())
                                     Button(onClick = {
                                         db.collection("config").document("settings").set(mapOf("announcement" to newAnnouncement), com.google.firebase.firestore.SetOptions.merge())
                                         Toast.makeText(context, "सूचना लाइव हो गई!", Toast.LENGTH_SHORT).show()
