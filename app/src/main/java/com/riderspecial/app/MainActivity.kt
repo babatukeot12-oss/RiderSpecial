@@ -17,13 +17,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -35,7 +32,6 @@ import com.google.firebase.database.*
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.delay
 import java.io.ByteArrayOutputStream
-import java.util.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -128,7 +124,13 @@ fun LoginScreen(db: FirebaseFirestore, onLoginSuccess: (String, Boolean) -> Unit
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(value = phone, onValueChange = { if (it.length <= 10) phone = it }, label = { Text("Mobile Number", color = Color.White) }, singleLine = true)
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { if (it.length <= 10) phone = it },
+                        label = { Text("Mobile Number", color = Color.White) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                    )
                     Spacer(Modifier.height(10.dp))
                     Button(onClick = {
                         if (phone.length == 10) {
@@ -140,7 +142,13 @@ fun LoginScreen(db: FirebaseFirestore, onLoginSuccess: (String, Boolean) -> Unit
                         Text("Direct Login & Start", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(value = pin, onValueChange = { pin = it }, label = { Text("Admin PIN (9954)", color = Color.White) }, singleLine = true)
+                    OutlinedTextField(
+                        value = pin,
+                        onValueChange = { pin = it },
+                        label = { Text("Admin PIN (9954)", color = Color.White) },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color.LightGray)
+                    )
                     Spacer(Modifier.height(6.dp))
                     Button(onClick = {
                         if (pin == "9954") onLoginSuccess("ADMIN", true)
@@ -170,7 +178,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
             val bmp = BitmapFactory.decodeStream(stream)
             val out = ByteArrayOutputStream()
             bmp.compress(Bitmap.CompressFormat.JPEG, 60, out)
-            receipt = Base64.encodeToString(out.toByteArray(), Base64.DEFAULT)
+            receipt = android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.DEFAULT)
             Toast.makeText(context, "Screenshot Attached", Toast.LENGTH_SHORT).show()
         }
     }
@@ -191,7 +199,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
         },
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF1E293B)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, label = { Text("Bidding", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("Bidding", color = Color.White) }, icon = {})
                 NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("₹49 Plan", color = Color.White) }, icon = {})
                 NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Chat", color = Color.White) }, icon = {})
             }
@@ -205,9 +213,30 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                             Card(Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Text("🎯 Custom Ride Bidding", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold)
-                                    OutlinedTextField(value = pickupKm, onValueChange = { pickupKm = it }, label = { Text("Max Pickup (Km)", color = Color.White) }, modifier = Modifier.fillMaxWidth())
-                                    OutlinedTextField(value = dropKm, onValueChange = { dropKm = it }, label = { Text("Max Drop (Km)", color = Color.White) }, modifier = Modifier.fillMaxWidth())
-                                    OutlinedTextField(value = bidAmount, onValueChange = { bidAmount = it }, label = { Text("Bid Amount (₹)", color = Color.White) }, modifier = Modifier.fillMaxWidth())
+                                    OutlinedTextField(
+                                        value = pickupKm,
+                                        onValueChange = { pickupKm = it },
+                                        label = { Text("Max Pickup (Km)", color = Color.White) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                                    )
+                                    OutlinedTextField(
+                                        value = dropKm,
+                                        onValueChange = { dropKm = it },
+                                        label = { Text("Max Drop (Km)", color = Color.White) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                                    )
+                                    OutlinedTextField(
+                                        value = bidAmount,
+                                        onValueChange = { bidAmount = it },
+                                        label = { Text("Bid Amount (₹)", color = Color.White) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                                    )
                                     Button(onClick = { Toast.makeText(context, "Bid Saved!", Toast.LENGTH_SHORT).show() }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
                                         Text("Save & Go Live", color = Color.Black, fontWeight = FontWeight.Bold)
                                     }
@@ -220,7 +249,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                     Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("30 Days Unlimited - ₹49", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         if (qr.isNotEmpty()) {
-                            val bytes = Base64.decode(qr, Base64.DEFAULT)
+                            val bytes = android.util.Base64.decode(qr, android.util.Base64.DEFAULT)
                             val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             if (bmp != null) Image(bitmap = bmp.asImageBitmap(), contentDescription = "QR", modifier = Modifier.size(150.dp))
                         }
@@ -268,7 +297,13 @@ fun ChatScreen(phone: String, isAdmin: Boolean, rtdb: DatabaseReference) {
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(value = msg, onValueChange = { msg = it }, modifier = Modifier.weight(1f), placeholder = { Text("Message...", color = Color.LightGray) })
+            OutlinedTextField(
+                value = msg,
+                onValueChange = { msg = it },
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("Message...", color = Color.LightGray) },
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+            )
             Spacer(Modifier.width(6.dp))
             Button(onClick = {
                 if (msg.isNotBlank()) {
@@ -294,7 +329,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
             val stream = context.contentResolver.openInputStream(it)
             val bytes = stream?.readBytes()
             if (bytes != null) {
-                val b64 = Base64.encodeToString(bytes, Base64.DEFAULT)
+                val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
                 db.collection("config").document("settings").set(mapOf("qrBase64" to b64), com.google.firebase.firestore.SetOptions.merge())
                 Toast.makeText(context, "QR Updated Live!", Toast.LENGTH_SHORT).show()
             }
@@ -343,7 +378,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                                     Text("Phone: ${item.phone}", fontWeight = FontWeight.Bold, color = Color.Black)
                                     Spacer(Modifier.height(6.dp))
                                     if (item.receipt.isNotEmpty()) {
-                                        val bytes = Base64.decode(item.receipt, Base64.DEFAULT)
+                                        val bytes = android.util.Base64.decode(item.receipt, android.util.Base64.DEFAULT)
                                         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                                         if (bmp != null) Image(bitmap = bmp.asImageBitmap(), contentDescription = "Proof", modifier = Modifier.height(150.dp).fillMaxWidth())
                                     }
