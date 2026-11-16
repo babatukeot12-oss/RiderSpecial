@@ -5,8 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
-import android.view.View
-import android.widget.*
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import java.util.UUID
 
@@ -58,43 +61,59 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSubscriptionLockScreen() {
+        // Programmatic secure dialog to avoid missing layout errors
         val dialog = Dialog(this)
-        dialog.setContentView(R.layout.dialog_subscription)
-        dialog.setCancelable(false)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(50, 50, 50, 50)
+        }
 
-        val txtStatus = dialog.findViewById<TextView>(R.id.txtTrialStatus)
-        val btnPay = dialog.findViewById<Button>(R.id.btnPayNow)
-        val btnUpload = dialog.findViewById<Button>(R.id.btnUploadScreenshot)
+        val title = TextView(this).apply {
+            text = "Captain Smart Pro - Subscription"
+            textSize = 20f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
 
-        txtStatus.text = "7-Day Free Trial Expired!\nPay ₹49 for 30 Days Subscription."
+        val message = TextView(this).apply {
+            text = "\nYour 7-Day Free Trial has expired!\n\nPay ₹49 for 30 Days Subscription using Admin QR code.\n"
+            textSize = 15f
+        }
 
-        btnPay.setOnClickListener {
-            // Open UPI Apps with your personal UPI ID / QR
-            val upiUri = Uri.parse("upi://pay?pa=babatukeot@paytm&pn=DinaKeot&am=49.00&cu=INR")
-            val intent = Intent(Intent.ACTION_VIEW, upiUri)
-            try {
-                startActivity(intent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "Please scan Admin QR code to pay ₹49", Toast.LENGTH_LONG).show()
+        val btnPay = Button(this).apply {
+            text = "Pay ₹49 via UPI / QR"
+            setOnClickListener {
+                val upiUri = Uri.parse("upi://pay?pa=babatukeot@paytm&pn=DinaKeot&am=49.00&cu=INR")
+                val intent = Intent(Intent.ACTION_VIEW, upiUri)
+                try {
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Please scan Admin QR code", Toast.LENGTH_LONG).show()
+                }
             }
         }
 
-        btnUpload.setOnClickListener {
-            Toast.makeText(this, "Opening gallery to upload payment screenshot for Admin approval...", Toast.LENGTH_SHORT).show()
+        val btnUpload = Button(this).apply {
+            text = "Upload Payment Screenshot"
+            setOnClickListener {
+                Toast.makeText(context, "Opening gallery for screenshot upload...", Toast.LENGTH_SHORT).show()
+            }
         }
 
+        layout.addView(title)
+        layout.addView(message)
+        layout.addView(btnPay)
+        layout.addView(btnUpload)
+
+        dialog.setContentView(layout)
+        dialog.setCancelable(false)
         dialog.show()
     }
 
     private fun initAppDashboard() {
-        // Handle Rider Mobile Number Login & Admin Login (PIN: 3479)
         Toast.makeText(this, "Welcome to Captain Smart Pro!", Toast.LENGTH_SHORT).show()
-        
-        // Example check for Admin Login button
-        // If admin clicks Admin Login -> prompt for PIN "3479"
     }
 
     fun verifyAdminPin(enteredPin: String): Boolean {
-        return enteredPin == "3479"
+        return enteredPin == "3479" // Admin PIN mapped to your bike number digits
     }
 }
