@@ -14,13 +14,17 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -38,10 +42,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme(
-                colorScheme = lightColorScheme(
+                colorScheme = darkColorScheme(
                     primary = Color(0xFF22C55E),
-                    background = Color(0xFF0F172A),
-                    surface = Color(0xFF1E293B),
+                    secondary = Color(0xFF38BDF8),
+                    background = Color(0xFF070A12),
+                    surface = Color(0xFF131D31),
                     onPrimary = Color.Black,
                     onBackground = Color.White,
                     onSurface = Color.White
@@ -55,7 +60,7 @@ class MainActivity : ComponentActivity() {
 
 data class RiderItem(val phone: String = "", val vehicle: String = "", val expiry: Long = 0L)
 data class PaymentItem(val id: String = "", val phone: String = "", val receipt: String = "", val status: String = "")
-data class LiveRiderItem(val phone: String = "", val vehicle: String = "")
+data class LiveRiderItem(val phone: String = "", val vehicle: String = "", val pickup: String = "", val drop: String = "", val bid: String = "")
 
 @SuppressLint("HardwareIds")
 @Composable
@@ -70,16 +75,30 @@ fun CaptainSmartApp() {
     var isAdmin by remember { mutableStateOf(prefs.getBoolean("admin", false)) }
 
     LaunchedEffect(Unit) {
-        delay(1500)
+        delay(1400)
         showSplash = false
     }
 
     if (showSplash) {
-        Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0F172A), Color(0xFF1E293B)))), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF070A12), Color(0xFF131D31), Color(0xFF070A12)))),
+            contentAlignment = Alignment.Center
+        ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("👑 Captain Smart Pro", color = Color(0xFF22C55E), fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text("Dibrugarh Fleet & Bidding Hub", color = Color.White, fontSize = 12.sp)
+                Surface(
+                    modifier = Modifier.size(100.dp),
+                    shape = CircleShape,
+                    color = Color(0xFF22C55E).copy(alpha = 0.2f),
+                    border = BorderStroke(2.dp, Color(0xFF22C55E))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("👑", fontSize = 48.sp)
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                Text("CAPTAIN SMART PRO", color = Color(0xFF22C55E), fontSize = 26.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
+                Spacer(Modifier.height(6.dp))
+                Text("Dibrugarh Premium Fleet & Bidding Hub", color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
         }
     } else if (loggedInPhone.isEmpty()) {
@@ -109,62 +128,93 @@ fun LoginScreen(prefs: android.content.SharedPreferences, db: FirebaseFirestore,
     var pin by remember { mutableStateOf("") }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0F172A), Color(0xFF1E293B)))).padding(20.dp),
+        modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF070A12), Color(0xFF131D31)))).padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         item {
-            Text("Captain Smart Pro", color = Color(0xFF22C55E), fontSize = 24.sp, fontWeight = FontWeight.Bold)
-            Text("Direct Instant Login", color = Color.White, fontSize = 11.sp)
-            Spacer(Modifier.height(16.dp))
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))) {
-                Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Select Vehicle Type:", color = Color.White, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
+            Text("👑 Captain Smart Pro", color = Color(0xFF22C55E), fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("Dibrugarh's Smart Ride Dispatcher", color = Color.LightGray, fontSize = 12.sp)
+            Spacer(Modifier.height(20.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Select Your Vehicle Type:", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         listOf("Bike 🏍️", "Auto 🛺", "Taxi 🚕", "EV ⚡").forEach { v ->
-                            Button(onClick = { vehicle = v }, colors = ButtonDefaults.buttonColors(containerColor = if (vehicle == v) Color(0xFF22C55E) else Color.Gray)) {
-                                Text(v, fontSize = 10.sp, color = Color.Black)
+                            Button(
+                                onClick = { vehicle = v },
+                                colors = ButtonDefaults.buttonColors(containerColor = if (vehicle == v) Color(0xFF22C55E) else Color(0xFF1E293B)),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text(v, fontSize = 11.sp, color = if (vehicle == v) Color.Black else Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(18.dp))
                     OutlinedTextField(
                         value = phone,
                         onValueChange = { if (it.length <= 10) phone = it },
-                        label = { Text("10-digit Mobile Number", color = Color.White) },
+                        label = { Text("10-digit Mobile Number", color = Color.LightGray) },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.Gray)
                     )
-                    Spacer(Modifier.height(10.dp))
-                    Button(onClick = {
-                        if (phone.length == 10) {
-                            val expiry = System.currentTimeMillis() + 86400000L * 30
-                            prefs.edit().putString("phone", phone).putBoolean("admin", false).putLong("expiry", expiry).apply()
-                            db.collection("riders").document(phone).set(mapOf("phone" to phone, "vehicle" to vehicle, "expiry" to expiry))
-                            Toast.makeText(context, "Login Success!", Toast.LENGTH_SHORT).show()
-                            onLoginSuccess(phone, false)
-                        } else Toast.makeText(context, "Enter valid 10 digits", Toast.LENGTH_SHORT).show()
-                    }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)), modifier = Modifier.fillMaxWidth()) {
-                        Text("🚀 Direct Login & Start", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(14.dp))
+                    Button(
+                        onClick = {
+                            if (phone.length == 10) {
+                                val expiry = System.currentTimeMillis() + 86400000L * 30
+                                prefs.edit().putString("phone", phone).putBoolean("admin", false).putLong("expiry", expiry).apply()
+                                db.collection("riders").document(phone).set(mapOf("phone" to phone, "vehicle" to vehicle, "expiry" to expiry))
+                                Toast.makeText(context, "Login Successful! Welcome Captain.", Toast.LENGTH_SHORT).show()
+                                onLoginSuccess(phone, false)
+                            } else {
+                                Toast.makeText(context, "Please enter a valid 10-digit mobile number", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("🚀 Direct Login & Start", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
+
+                    Spacer(Modifier.height(20.dp))
+                    Divider(color = Color.Gray.copy(alpha = 0.3f))
                     Spacer(Modifier.height(16.dp))
+
                     OutlinedTextField(
                         value = pin,
                         onValueChange = { pin = it },
-                        label = { Text("Admin PIN (9954)", color = Color.White) },
+                        label = { Text("Admin PIN (9954)", color = Color.LightGray) },
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color.LightGray)
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color.Gray)
                     )
-                    Spacer(Modifier.height(6.dp))
-                    Button(onClick = {
-                        if (pin == "9954") {
-                            prefs.edit().putBoolean("admin", true).apply()
-                            Toast.makeText(context, "Welcome Admin!", Toast.LENGTH_SHORT).show()
-                            onLoginSuccess("ADMIN", true)
-                        } else Toast.makeText(context, "Wrong PIN", Toast.LENGTH_SHORT).show()
-                    }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8))) {
-                        Text("Open Admin Panel", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            if (pin == "9954") {
+                                prefs.edit().putBoolean("admin", true).apply()
+                                Toast.makeText(context, "Welcome Admin!", Toast.LENGTH_SHORT).show()
+                                onLoginSuccess("ADMIN", true)
+                            } else {
+                                Toast.makeText(context, "Wrong Admin PIN", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("🛠️ Open Super Admin Panel", color = Color.Black, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -180,6 +230,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
     var pickupKm by remember { mutableStateOf("2.0") }
     var dropKm by remember { mutableStateOf("5.0") }
     var bidAmount by remember { mutableStateOf("150") }
+    var autoAccept by remember { mutableStateOf(true) }
     val context = LocalContext.current
 
     val payPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -189,7 +240,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
             val out = ByteArrayOutputStream()
             bmp.compress(Bitmap.CompressFormat.JPEG, 60, out)
             receipt = android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.DEFAULT)
-            Toast.makeText(context, "Screenshot Attached", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Payment Screenshot Attached Successfully!", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -202,56 +253,107 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
 
     Scaffold(
         topBar = {
-            Row(Modifier.fillMaxWidth().background(Color(0xFF0F172A)).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Captain • Active ($phone)", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Button(onClick = onLogout, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Logout", fontSize = 10.sp) }
+            Surface(color = Color(0xFF131D31), shadowElevation = 6.dp) {
+                Row(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("👑 Captain Pro", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("ID: $phone • Dibrugarh Zone", color = Color.LightGray, fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = onLogout,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text("Logout", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = Color(0xFF1E293B)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("Bidding", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("₹49 Plan", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Chat", color = Color.White) }, icon = {})
+            NavigationBar(containerColor = Color(0xFF131D31)) {
+                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("🎯 Bidding", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("💳 ₹49 Plan", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("💬 Support", color = Color.White) }, icon = {})
             }
         }
     ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize().background(Color(0xFF0F172A))) {
+        Box(Modifier.padding(pad).fillMaxSize().background(Color(0xFF070A12))) {
             when (tab) {
                 0 -> {
-                    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         item {
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text("🎯 Custom Ride Bidding & Live Status", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold)
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFDCFCE7))
+                            ) {
+                                Row(Modifier.padding(14.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🟢", fontSize = 18.sp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Column {
+                                        Text("Status: Online & Ready", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp)
+                                        Text("Nearest Dispatch & 0.00s Auto-Accept Active", fontSize = 11.sp, color = Color.DarkGray)
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31))
+                            ) {
+                                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("⚡ Custom Ride Bidding & Control", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                     OutlinedTextField(
                                         value = pickupKm,
                                         onValueChange = { pickupKm = it },
-                                        label = { Text("Max Pickup (Km)", color = Color.White) },
-                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("Max Pickup Distance (Km)", color = Color.LightGray) },
                                         singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.Gray)
                                     )
                                     OutlinedTextField(
                                         value = dropKm,
                                         onValueChange = { dropKm = it },
-                                        label = { Text("Max Drop (Km)", color = Color.White) },
-                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("Max Drop-off Distance (Km)", color = Color.LightGray) },
                                         singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.Gray)
                                     )
                                     OutlinedTextField(
                                         value = bidAmount,
                                         onValueChange = { bidAmount = it },
-                                        label = { Text("Bid Amount (₹)", color = Color.White) },
-                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("Your Bid Amount (₹)", color = Color.LightGray) },
                                         singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.Gray)
                                     )
-                                    Button(onClick = {
-                                        rtdb.child("live_riders").child(phone).setValue(mapOf("phone" to phone, "pickup" to pickupKm, "drop" to dropKm, "bid" to bidAmount, "time" to System.currentTimeMillis()))
-                                        Toast.makeText(context, "Saved & Live on Dibrugarh Zone!", Toast.LENGTH_LONG).show()
-                                    }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
-                                        Text("Save & Go Live", color = Color.Black, fontWeight = FontWeight.Bold)
+
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                        Text("Auto-Accept Rides", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Switch(checked = autoAccept, onCheckedChange = { autoAccept = it })
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            rtdb.child("live_riders").child(phone).setValue(
+                                                mapOf("phone" to phone, "pickup" to pickupKm, "drop" to dropKm, "bid" to bidAmount, "time" to System.currentTimeMillis())
+                                            )
+                                            Toast.makeText(context, "✅ Successfully Saved & Live in Dibrugarh Zone!", Toast.LENGTH_LONG).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("🔥 Save & Go Live", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                     }
                                 }
                             }
@@ -259,28 +361,54 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                     }
                 }
                 1 -> {
-                    Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("30 Days Unlimited - ₹49", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        if (qr.isNotEmpty()) {
-                            val bytes = android.util.Base64.decode(qr, android.util.Base64.DEFAULT)
-                            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                            if (bmp != null) Image(bitmap = bmp.asImageBitmap(), contentDescription = "QR", modifier = Modifier.size(150.dp))
-                        } else {
-                            Text("UPI QR Loading...", color = Color.LightGray, fontSize = 12.sp)
+                    LazyColumn(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        item {
+                            Text("💳 30 Days Unlimited - ₹49", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         }
-                        Button(onClick = { payPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (receipt.isEmpty()) "Attach Payment Screenshot" else "✅ Screenshot Attached")
-                        }
-                        Button(onClick = {
-                            if (receipt.isNotEmpty()) {
-                                db.collection("payments").add(mapOf("phone" to phone, "receipt" to receipt, "status" to "pending", "time" to System.currentTimeMillis()))
-                                receipt = ""
-                                Toast.makeText(context, "Screenshot sent to Admin Successfully!", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, "Please attach screenshot first", Toast.LENGTH_SHORT).show()
+                        item {
+                            Card(
+                                modifier = Modifier.size(190.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White)
+                            ) {
+                                Box(Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.Center) {
+                                    if (qr.isNotEmpty()) {
+                                        val bytes = android.util.Base64.decode(qr, android.util.Base64.DEFAULT)
+                                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                        if (bmp != null) Image(bitmap = bmp.asImageBitmap(), contentDescription = "QR", modifier = Modifier.fillMaxSize())
+                                    } else {
+                                        Text("Scan & Pay ₹49\nUPI: dinakeot@upi", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                }
                             }
-                        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
-                            Text("Submit Payment Screenshot", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                        item {
+                            Button(
+                                onClick = { payPicker.launch("image/*") },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(if (receipt.isEmpty()) "📸 Attach Payment Screenshot" else "✅ Screenshot Attached Successfully", color = Color.Black, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        item {
+                            Button(
+                                onClick = {
+                                    if (receipt.isNotEmpty()) {
+                                        db.collection("payments").add(mapOf("phone" to phone, "receipt" to receipt, "status" to "pending", "time" to System.currentTimeMillis()))
+                                        receipt = ""
+                                        Toast.makeText(context, "🚀 Screenshot Sent to Admin Successfully!", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "Please attach payment screenshot first", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                                modifier = Modifier.fillMaxWidth().height(50.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Submit Payment to Admin", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            }
                         }
                     }
                 }
@@ -307,10 +435,19 @@ fun ChatScreen(phone: String, isAdmin: Boolean, rtdb: DatabaseReference) {
         })
     }
 
-    Column(Modifier.fillMaxSize().padding(8.dp)) {
-        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(list) { (s, t) ->
-                Text("$s: $t", color = Color.White, fontSize = 13.sp)
+                Surface(
+                    color = if (s == "Admin") Color(0xFF131D31) else Color(0xFF22C55E).copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(Modifier.padding(10.dp)) {
+                        Text(s, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
+                        Spacer(Modifier.height(2.dp))
+                        Text(t, color = Color.White, fontSize = 13.sp)
+                    }
+                }
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -319,15 +456,22 @@ fun ChatScreen(phone: String, isAdmin: Boolean, rtdb: DatabaseReference) {
                 onValueChange = { msg = it },
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Type message...", color = Color.LightGray) },
-                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.LightGray)
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF22C55E), unfocusedBorderColor = Color.Gray)
             )
-            Spacer(Modifier.width(6.dp))
-            Button(onClick = {
-                if (msg.isNotBlank()) {
-                    rtdb.child("chats").child(phone).push().setValue(mapOf("sender" to if (isAdmin) "Admin" else phone, "text" to msg))
-                    msg = ""
-                }
-            }) { Text("Send") }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = {
+                    if (msg.isNotBlank()) {
+                        rtdb.child("chats").child(phone).push().setValue(mapOf("sender" to if (isAdmin) "Admin" else phone, "text" to msg))
+                        msg = ""
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Send", color = Color.Black, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -349,13 +493,12 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
             if (bytes != null) {
                 val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.DEFAULT)
                 db.collection("config").document("settings").set(mapOf("qrBase64" to b64), com.google.firebase.firestore.SetOptions.merge())
-                Toast.makeText(context, "QR Code Updated Live!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "QR Code Updated Successfully!", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
     LaunchedEffect(Unit) {
-        // Fetch all payments and filter in memory to avoid index requirements
         db.collection("payments").addSnapshotListener { snap, _ ->
             payments.clear()
             snap?.documents?.forEach { doc ->
@@ -377,7 +520,10 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                 for (child in snapshot.children) {
                     val phone = child.child("phone").getValue(String::class.java) ?: child.key ?: ""
                     val vehicle = child.child("vehicle").getValue(String::class.java) ?: "Bike"
-                    liveRiders.add(LiveRiderItem(phone, vehicle))
+                    val pickup = child.child("pickup").getValue(String::class.java) ?: "2.0"
+                    val drop = child.child("drop").getValue(String::class.java) ?: "5.0"
+                    val bid = child.child("bid").getValue(String::class.java) ?: "150"
+                    liveRiders.add(LiveRiderItem(phone, vehicle, pickup, drop, bid))
                 }
             }
             override fun onCancelled(error: DatabaseError) {}
@@ -386,44 +532,64 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
 
     Scaffold(
         topBar = {
-            Row(Modifier.fillMaxWidth().background(Color(0xFF0F172A)).padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("SUPER ADMIN PANEL", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
-                Button(onClick = onLogout, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) { Text("Logout", fontSize = 10.sp) }
+            Surface(color = Color(0xFF131D31), shadowElevation = 6.dp) {
+                Row(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🛠️ SUPER ADMIN PANEL", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Button(
+                        onClick = onLogout,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text("Logout", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = Color(0xFF1E293B)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("Payments", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("QR", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("Profiles", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 3, onClick = { tab == 3 }, label = { Text("GPS", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 4, onClick = { tab == 4 }, label = { Text("Chat", color = Color.White) }, icon = {})
+            NavigationBar(containerColor = Color(0xFF131D31)) {
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, label = { Text("💳 Payments", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("📷 QR", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("👥 Profiles", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 3, onClick = { tab == 3 }, label = { Text("📍 GPS", color = Color.White) }, icon = {})
+                NavigationBarItem(selected = tab == 4, onClick = { tab == 4 }, label = { Text("💬 Chat", color = Color.White) }, icon = {})
             }
         }
     ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize().background(Color(0xFF0F172A))) {
+        Box(Modifier.padding(pad).fillMaxSize().background(Color(0xFF070A12))) {
             when (tab) {
                 0 -> {
                     LazyColumn(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (payments.isEmpty()) item { Text("No pending payment screenshots.", color = Color.White) }
+                        if (payments.isEmpty()) {
+                            item { Text("No pending payment screenshots.", color = Color.LightGray, fontSize = 13.sp) }
+                        }
                         items(payments) { item ->
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text("Rider Phone: ${item.phone}", fontWeight = FontWeight.Bold, color = Color.Black)
-                                    Spacer(Modifier.height(6.dp))
+                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31))) {
+                                Column(Modifier.padding(14.dp)) {
+                                    Text("Rider Phone: ${item.phone}", fontWeight = FontWeight.Bold, color = Color(0xFF22C55E), fontSize = 14.sp)
+                                    Spacer(Modifier.height(8.dp))
                                     if (item.receipt.isNotEmpty()) {
                                         val bytes = android.util.Base64.decode(item.receipt, android.util.Base64.DEFAULT)
                                         val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                                        if (bmp != null) Image(bitmap = bmp.asImageBitmap(), contentDescription = "Proof", modifier = Modifier.height(150.dp).fillMaxWidth())
+                                        if (bmp != null) Image(bitmap = bmp.asImageBitmap(), contentDescription = "Proof", modifier = Modifier.height(160.dp).fillMaxWidth().clip(RoundedCornerShape(8.dp)))
                                     }
-                                    Spacer(Modifier.height(8.dp))
-                                    Button(onClick = {
-                                        db.collection("payments").document(item.id).update("status", "approved")
-                                        val newExp = System.currentTimeMillis() + 86400000L * 30
-                                        db.collection("riders").document(item.phone).update("expiry", newExp)
-                                        Toast.makeText(context, "30 Days Plan Approved!", Toast.LENGTH_SHORT).show()
-                                    }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E))) {
-                                        Text("Approve 30 Days Plan", color = Color.Black)
+                                    Spacer(Modifier.height(10.dp))
+                                    Button(
+                                        onClick = {
+                                            db.collection("payments").document(item.id).update("status", "approved")
+                                            val newExp = System.currentTimeMillis() + 86400000L * 30
+                                            db.collection("riders").document(item.phone).update("expiry", newExp)
+                                            Toast.makeText(context, "✅ Plan Approved for 30 Days!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("Approve 30 Days Plan", color = Color.Black, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -431,29 +597,47 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                     }
                 }
                 1 -> {
-                    Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(onClick = { qrPicker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text("📷 Upload New QR Code") }
+                    Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Text("Instant UPI QR Code Manager", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("Upload a new QR code from your gallery. It will instantly update across all rider apps in Dibrugarh.", color = Color.LightGray, fontSize = 12.sp)
+                        Button(
+                            onClick = { qrPicker.launch("image/*") },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                            modifier = Modifier.fillMaxWidth().height(50.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("📷 Upload New QR Code Image", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
                     }
                 }
                 2 -> {
                     LazyColumn(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        item { Text("👥 Registered Rider Profiles", color = Color.White, fontWeight = FontWeight.Bold) }
-                        if (riders.isEmpty()) item { Text("No registered riders yet.", color = Color.White) }
+                        item { Text("👥 Registered Rider Profiles", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold) }
+                        if (riders.isEmpty()) {
+                            item { Text("No registered riders found.", color = Color.LightGray, fontSize = 13.sp) }
+                        }
                         items(riders) { r ->
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text("Phone: ${r.phone} | Vehicle: ${r.vehicle}", fontWeight = FontWeight.Bold, color = Color.Black)
-                                    Spacer(Modifier.height(8.dp))
+                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31))) {
+                                Column(Modifier.padding(14.dp)) {
+                                    Text("Phone: ${r.phone}", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                                    Text("Vehicle: ${r.vehicle}", color = Color(0xFF22C55E), fontSize = 12.sp)
+                                    Spacer(Modifier.height(10.dp))
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                                        Button(onClick = {
-                                            context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${r.phone}")))
-                                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
-                                            Text("📞 Call", color = Color.Black, fontSize = 11.sp)
+                                        Button(
+                                            onClick = { context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${r.phone}"))) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                                        ) {
+                                            Text("📞 Call", color = Color.Black, fontWeight = FontWeight.Bold)
                                         }
-                                        Button(onClick = {
-                                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/91${r.phone}")))
-                                        }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
-                                            Text("💬 WhatsApp", color = Color.Black, fontSize = 11.sp)
+                                        Button(
+                                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/91${r.phone}"))) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                                        ) {
+                                            Text("💬 WhatsApp", color = Color.Black, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -462,14 +646,21 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                     }
                 }
                 3 -> {
-                    LazyColumn(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item { Text("📍 Live Rider GPS Status (Dibrugarh)", color = Color.White, fontWeight = FontWeight.Bold) }
-                        if (liveRiders.isEmpty()) item { Text("No active riders online right now.", color = Color.White) }
+                    LazyColumn(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        item { Text("📍 Live Dibrugarh Fleet GPS Tracking", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold) }
+                        if (liveRiders.isEmpty()) {
+                            item { Text("No active riders online right now.", color = Color.LightGray, fontSize = 13.sp) }
+                        }
                         items(liveRiders) { r ->
-                            Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp)) {
-                                    Text("Phone: ${r.phone}", fontWeight = FontWeight.Bold, color = Color.Black)
-                                    Text("Vehicle: ${r.vehicle} • Status: Online & Active", color = Color(0xFF16A34A), fontSize = 12.sp)
+                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31))) {
+                                Column(Modifier.padding(14.dp)) {
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("Captain: ${r.phone}", fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text("🟢 Online", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    }
+                                    Spacer(Modifier.height(4.dp))
+                                    Text("Vehicle: ${r.vehicle}", color = Color(0xFF38BDF8), fontSize = 12.sp)
+                                    Text("Bid Settings -> Pickup: ${r.pickup}Km | Drop: ${r.drop}Km | Bid: ₹${r.bid}", color = Color.LightGray, fontSize = 11.sp)
                                 }
                             }
                         }
@@ -481,16 +672,27 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                             OutlinedTextField(
                                 value = chatPhone,
                                 onValueChange = { chatPhone = it },
-                                label = { Text("Rider Phone Number", color = Color.White) },
+                                label = { Text("Rider Phone Number", color = Color.LightGray) },
                                 modifier = Modifier.weight(1f),
-                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color.LightGray)
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color.Gray)
                             )
                             Spacer(Modifier.width(8.dp))
-                            Button(onClick = { activeChat = chatPhone }) { Text("Open") }
+                            Button(
+                                onClick = { activeChat = chatPhone },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Open", color = Color.Black, fontWeight = FontWeight.Bold)
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
                         if (activeChat.isNotEmpty()) {
                             ChatScreen(phone = activeChat, isAdmin = true, rtdb = rtdb)
+                        } else {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Enter a rider mobile number above to open live chat support.", color = Color.LightGray, fontSize = 12.sp)
+                            }
                         }
                     }
                 }
