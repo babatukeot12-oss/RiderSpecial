@@ -1,5 +1,6 @@
 package com.riderspecial.app
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -13,7 +14,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         
         // 1. Check Device-Locked 7-Day Trial & Subscription Status
-        val prefs = getSharedPreferences("RiderSpecialPrefs", MODE_PRIVATE)
+        val prefs = getSharedPreferences("RiderSpecialPrefs", Context.MODE_PRIVATE)
         var deviceId = prefs.getString("device_hardware_id", null)
         
         if (deviceId == null) {
