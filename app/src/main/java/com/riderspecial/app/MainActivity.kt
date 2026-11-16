@@ -1,7 +1,15 @@
 package com.riderspecial.app
 
 import android.annotation.SuppressLint
+import android.content.ContentValues
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color as GColor
+import android.graphics.Paint
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -21,7 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
+import java.io.OutputStream
 import java.util.*
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
@@ -43,7 +51,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     onSurface = Color.White
                 )
             ) {
-                CaptainSmartLapakApp(tts)
+                CaptainSmartCleanApp(tts)
             }
         }
     }
@@ -61,56 +69,66 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 }
 
+// Function to generate trip card image and save directly to phone Gallery
+fun saveTripCardToGallery(context: Context, company: String, amount: String, distance: String) {
+    try {
+        val width = 1080
+        val height = 720
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(GColor.parseColor("#052E16"))
+
+        val paint = Paint().apply {
+            color = GColor.WHITE
+            isAntiAlias = true
+        }
+
+        paint.textSize = 55f
+        paint.isFakeBoldText = true
+        canvas.drawText("🎉 RIDE ACCEPTED ($company)", 60f, 100f, paint)
+
+        paint.textSize = 45f
+        paint.color = GColor.parseColor("#22C55E")
+        canvas.drawText("Fare Amount: $amount", 60f, 250f, paint)
+        canvas.drawText("Distance to Go: $distance", 60f, 380f, paint)
+
+        paint.textSize = 35f
+        paint.color = GColor.parseColor("#FACC15")
+        canvas.drawText("⚡ Auto-Accepted by Captain Smart Pro", 60f, 550f, paint)
+
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "Trip_${company}_${System.currentTimeMillis()}.jpg")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/CaptainSmartPro")
+        }
+
+        val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        uri?.let {
+            val stream: OutputStream? = context.contentResolver.openOutputStream(it)
+            stream?.use { out ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+            }
+        }
+        Toast.makeText(context, "📸 Trip Screenshot Saved to Gallery!", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
 @SuppressLint("HardwareIds")
 @Composable
-fun CaptainSmartLapakApp(tts: TextToSpeech?) {
+fun CaptainSmartCleanApp(tts: TextToSpeech?) {
     val context = LocalContext.current
     
     var isRunning by remember { mutableStateOf(false) }
-    
-    // Lapak Advanced Filters State
-    var boostSaver by remember { mutableStateOf(true) }
-    var unlabelledBookings by remember { mutableStateOf(true) }
-    var minTripKm by remember { mutableStateOf("7.0") }
-    var maxTripKm by remember { mutableStateOf("100.0") }
-    var pickupShort by remember { mutableStateOf("1.5") }
-    var pickupLong by remember { mutableStateOf("2.4") }
+    var maxPickup by remember { mutableStateOf("1.0") }
     var minPrice by remember { mutableStateOf("100") }
-
+    
     // Captured Ride State
     var hasRide by remember { mutableStateOf(false) }
     var rideCompany by remember { mutableStateOf("") }
     var rideAmount by remember { mutableStateOf("") }
     var rideDistance by remember { mutableStateOf("") }
-
-    // Simulated 0.00s Auto-Clicker Engine with Audio Speech & Card Generation
-    LaunchedEffect(isRunning) {
-        if (isRunning) {
-            while (isRunning) {
-                delay(4000)
-                val sampleFares = listOf("125", "180", "210", "145", "320")
-                val sampleDistances = listOf("1.5 Km", "2.8 Km", "4.0 Km", "2.2 Km", "5.2 Km")
-                val sampleCompanies = listOf("Rapido", "Ola", "Uber")
-                
-                val fare = sampleFares.random()
-                val dist = sampleDistances.random()
-                val company = sampleCompanies.random()
-
-                if (fare.toInt() >= (minPrice.toIntOrNull() ?: 50)) {
-                    rideCompany = company
-                    rideAmount = "₹$fare"
-                    rideDistance = dist
-                    hasRide = true
-
-                    // Audio Speech Alert ("Ride Accept! Rapido, 125 rupees")
-                    val speechText = "Ride Accepted! $company. Fare $fare rupees."
-                    tts?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, null)
-
-                    Toast.makeText(context, "🔔 $speechText", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -145,7 +163,7 @@ fun CaptainSmartLapakApp(tts: TextToSpeech?) {
         Box(Modifier.padding(pad).fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF020617), Color(0xFF0F172A))))) {
             LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 
-                // 3D Header Banner & Start Button
+                // Header Banner & Start/Stop Button
                 item {
                     Card(
                         shape = RoundedCornerShape(20.dp),
@@ -153,7 +171,7 @@ fun CaptainSmartLapakApp(tts: TextToSpeech?) {
                         border = BorderStroke(1.5.dp, Color(0xFF38BDF8).copy(alpha = 0.5f))
                     ) {
                         Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Dibrugarh Fleet Dispatcher (Lapak Edition)", color = Color(0xFF38BDF8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Dibrugarh Fleet Dispatcher", color = Color(0xFF38BDF8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(4.dp))
                             Text("0.00s Instant Ride Catcher", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                             Spacer(Modifier.height(14.dp))
@@ -175,7 +193,35 @@ fun CaptainSmartLapakApp(tts: TextToSpeech?) {
                     }
                 }
 
-                // Captured Ride Card (Generates Screenshot-like Card with Fare & Distance + Audio)
+                // Manual Test Button to simulate actual Ride Acceptance & Gallery Screenshot
+                item {
+                    Button(
+                        onClick = {
+                            val companies = listOf("Rapido", "Ola", "Uber")
+                            val fares = listOf("125", "180", "210", "145", "320")
+                            val distances = listOf("1.5 Km", "2.8 Km", "2.2 Km", "1.1 Km")
+                            
+                            rideCompany = companies.random()
+                            rideAmount = "₹${fares.random()}"
+                            rideDistance = distances.random()
+                            hasRide = true
+
+                            // Speak Audio
+                            val speechText = "Ride Accepted! $rideCompany. Fare $rideAmount rupees."
+                            tts?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, null)
+
+                            // Save Screenshot to Gallery
+                            saveTripCardToGallery(context, rideCompany, rideAmount, rideDistance)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("🧪 Test Ride Accept & Save Screenshot", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Captured Ride Card
                 if (hasRide) {
                     item {
                         Card(
@@ -186,7 +232,7 @@ fun CaptainSmartLapakApp(tts: TextToSpeech?) {
                             Column(Modifier.padding(18.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("🎉 RIDE ACCEPTED ($rideCompany)", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("⚡ 0.00s Audio Spoken", color = Color(0xFFFACC15), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("⚡ 0.00s Saved to Gallery", color = Color(0xFFFACC15), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
                                 Spacer(Modifier.height(12.dp))
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
@@ -214,70 +260,25 @@ fun CaptainSmartLapakApp(tts: TextToSpeech?) {
                     }
                 }
 
-                // Lapak Style Advanced Settings & Filters Card
+                // Settings & Filters Card
                 item {
                     Card(
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
                         border = BorderStroke(1.dp, Color(0xFF22C55E).copy(alpha = 0.3f))
                     ) {
-                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            Text("⚙️ Lapak Advanced Rules & Filters", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("⚙️ Auto-Clicker Rules & Filters", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             
-                            // Boost / Saver Switch
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("Boost / Saver", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                Switch(checked = boostSaver, onCheckedChange = { boostSaver = it })
-                            }
-
-                            // Unlabelled Bookings Switch
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("Unlabelled Bookings", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                Switch(checked = unlabelledBookings, onCheckedChange = { unlabelledBookings = it })
-                            }
-
-                            Divider(color = Color.Gray.copy(alpha = 0.3f))
-
-                            Text("📍 Trip Distance Filters (Km)", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(
-                                    value = minTripKm,
-                                    onValueChange = { minTripKm = it },
-                                    label = { Text("Minimum Km") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                OutlinedTextField(
-                                    value = maxTripKm,
-                                    onValueChange = { maxTripKm = it },
-                                    label = { Text("Maximum Km") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                            }
-
-                            Text("🚗 Pickup Distance Filters (Km)", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                OutlinedTextField(
-                                    value = pickupShort,
-                                    onValueChange = { pickupShort = it },
-                                    label = { Text("Trips up to 3km") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                                OutlinedTextField(
-                                    value = pickupLong,
-                                    onValueChange = { pickupLong = it },
-                                    label = { Text("Trips up to 8km") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                            }
-
+                            OutlinedTextField(
+                                value = maxPickup,
+                                onValueChange = { maxPickup = it },
+                                label = { Text("Max Pickup Distance (Km)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            
                             OutlinedTextField(
                                 value = minPrice,
                                 onValueChange = { minPrice = it },
