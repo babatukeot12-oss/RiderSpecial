@@ -13,6 +13,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -50,8 +52,8 @@ fun CaptainSmartPureApp() {
     val context = LocalContext.current
     
     var isRunning by remember { mutableStateOf(false) }
-    var maxPickup = remember { mutableStateOf("3.0") }
-    var minPrice = remember { mutableStateOf("100") }
+    var maxPickup by remember { mutableStateOf("3.0") }
+    var minPrice by remember { mutableStateOf("100") }
     
     // Captured Ride State for the generated Card
     var capturedRide by remember { mutableStateOf?>(null) }
@@ -69,7 +71,7 @@ fun CaptainSmartPureApp() {
                 val dist = sampleDistances.random()
                 val company = sampleCompanies.random()
 
-                if (fare.toInt() >= (minPrice.value.toIntOrNull() ?: 50)) {
+                if (fare.toInt() >= (minPrice.toIntOrNull() ?: 50)) {
                     capturedRide = mapOf(
                         "company" to company,
                         "amount" to "₹$fare",
@@ -196,8 +198,8 @@ fun CaptainSmartPureApp() {
                             Text("⚙️ Auto-Clicker Rules & Filters", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             
                             OutlinedTextField(
-                                value = maxPickup.value,
-                                onValueChange = { maxPickup.value = it },
+                                value = maxPickup,
+                                onValueChange = { maxPickup = it },
                                 label = { Text("Max Pickup Distance (Km)") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
@@ -211,8 +213,8 @@ fun CaptainSmartPureApp() {
                             )
                             
                             OutlinedTextField(
-                                value = minPrice.value,
-                                onValueChange = { minPrice.value = it },
+                                value = minPrice,
+                                onValueChange = { minPrice = it },
                                 label = { Text("Minimum Price / MRP Filter (₹)") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
