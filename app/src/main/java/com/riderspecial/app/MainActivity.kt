@@ -76,7 +76,7 @@ fun CaptainSmartApp() {
     var isAdmin by remember { mutableStateOf(prefs.getBoolean("admin", false)) }
 
     LaunchedEffect(Unit) {
-        delay(1200)
+        delay(1400)
         showSplash = false
     }
 
@@ -277,7 +277,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
         },
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF0F172A)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("🎯 Auto-Clicker", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, label = { Text("🎯 Auto-Clicker", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
                 NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("💳 ₹49 Plan", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
                 NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("💬 Support", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
             }
