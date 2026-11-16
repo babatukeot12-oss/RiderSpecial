@@ -2,17 +2,14 @@ package com.riderspecial.app
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.media.MediaPlayer
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import java.util.*
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,10 +48,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun CaptainSmartPureApp() {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences("CaptainPurePrefs", Context.MODE_PRIVATE) }
     
     var isRunning by remember { mutableStateOf(false) }
-    var selectedVehicle = remember { mutableStateOf("Bike 🏍️") }
     var maxPickup = remember { mutableStateOf("3.0") }
     var minPrice = remember { mutableStateOf("100") }
     
@@ -131,7 +125,7 @@ fun CaptainSmartPureApp() {
                         Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Dibrugarh Fleet Dispatcher", color = Color(0xFF38BDF8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(4.dp))
-                            Text("0.00s Instant Ride Catcher", color = Colors.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                            Text("0.00s Instant Ride Catcher", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                             Spacer(Modifier.height(14.dp))
                             
                             // Start / Stop Big Glowing Button
@@ -207,7 +201,13 @@ fun CaptainSmartPureApp() {
                                 label = { Text("Max Pickup Distance (Km)") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF22C55E),
+                                    unfocusedBorderColor = Color.Gray
+                                )
                             )
                             
                             OutlinedTextField(
@@ -216,7 +216,13 @@ fun CaptainSmartPureApp() {
                                 label = { Text("Minimum Price / MRP Filter (₹)") },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White,
+                                    focusedBorderColor = Color(0xFF22C55E),
+                                    unfocusedBorderColor = Color.Gray
+                                )
                             )
                         }
                     }
