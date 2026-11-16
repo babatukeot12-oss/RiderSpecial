@@ -6,8 +6,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
-    <application android:icon="@drawable/rider_special_512x512"
-android:roundIcon="@drawable/rider_special_512x512"
+    <application android:icon="@drawable/rider_special_520x500
+android:roundIcon="@drawable/rider_special_520x500
         android:allowBackup="true"
         android:label="Captain Smart - Rider Special"
         android:supportsRtl="true"
