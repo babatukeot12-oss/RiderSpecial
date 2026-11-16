@@ -1,7 +1,6 @@
 package com.riderspecial.app
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -13,8 +12,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -55,8 +52,11 @@ fun CaptainSmartPureApp() {
     var maxPickup by remember { mutableStateOf("3.0") }
     var minPrice by remember { mutableStateOf("100") }
     
-    // Captured Ride State for the generated Card
-    var capturedRide by remember { mutableStateOf?>(null) }
+    // Simple Primitive States for Captured Ride (No Map/Generic Errors)
+    var hasRide by remember { mutableStateOf(false) }
+    var rideCompany by remember { mutableStateOf("") }
+    var rideAmount by remember { mutableStateOf("") }
+    var rideDistance by remember { mutableStateOf("") }
 
     // Simulated Auto-Clicker Engine catching rides in 0.00s
     LaunchedEffect(isRunning) {
@@ -72,13 +72,11 @@ fun CaptainSmartPureApp() {
                 val company = sampleCompanies.random()
 
                 if (fare.toInt() >= (minPrice.toIntOrNull() ?: 50)) {
-                    capturedRide = mapOf(
-                        "company" to company,
-                        "amount" to "₹$fare",
-                        "distance" to dist,
-                        "time" to "0.00s"
-                    )
-                    Toast.makeText(context, "🔔 Ride Accept! $company ($fare)", Toast.LENGTH_LONG).show()
+                    rideCompany = company
+                    rideAmount = "₹$fare"
+                    rideDistance = dist
+                    hasRide = true
+                    Toast.makeText(context, "🔔 Ride Accept! $company (₹$fare)", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -117,7 +115,7 @@ fun CaptainSmartPureApp() {
         Box(Modifier.padding(pad).fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF020617), Color(0xFF0F172A))))) {
             LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 
-                // 3D Styled Header Banner
+                // Header Banner & Start Button
                 item {
                     Card(
                         shape = RoundedCornerShape(20.dp),
@@ -130,7 +128,6 @@ fun CaptainSmartPureApp() {
                             Text("0.00s Instant Ride Catcher", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
                             Spacer(Modifier.height(14.dp))
                             
-                            // Start / Stop Big Glowing Button
                             Button(
                                 onClick = { isRunning = !isRunning },
                                 colors = ButtonDefaults.buttonColors(containerColor = if (isRunning) Color.Red else Color(0xFF22C55E)),
@@ -148,8 +145,8 @@ fun CaptainSmartPureApp() {
                     }
                 }
 
-                // Captured Ride Card (Generates instantly when ride is caught)
-                if (capturedRide != null) {
+                // Captured Ride Card (Shows Amount and Distance instantly)
+                if (hasRide) {
                     item {
                         Card(
                             shape = RoundedCornerShape(20.dp),
@@ -158,24 +155,24 @@ fun CaptainSmartPureApp() {
                         ) {
                             Column(Modifier.padding(18.dp)) {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("🎉 RIDE ACCEPTED (${capturedRide!!["company"]})", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("⚡ ${capturedRide!!["time"]}", color = Color(0xFFFACC15), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("🎉 RIDE ACCEPTED ($rideCompany)", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("⚡ 0.00s", color = Color(0xFFFACC15), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
                                 Spacer(Modifier.height(12.dp))
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("Fare Amount", color = Color.LightGray, fontSize = 11.sp)
-                                        Text(capturedRide!!["amount"]!!, color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                                        Text(rideAmount, color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
                                     }
                                     Divider(color = Color(0xFF22C55E).copy(alpha = 0.3f), modifier = Modifier.height(40.dp).width(1.dp))
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("Distance to Go", color = Color.LightGray, fontSize = 11.sp)
-                                        Text(capturedRide!!["distance"]!!, color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                                        Text(rideDistance, color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
                                     }
                                 }
                                 Spacer(Modifier.height(14.dp))
                                 Button(
-                                    onClick = { capturedRide = null },
+                                    onClick = { hasRide = false },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
                                     modifier = Modifier.fillMaxWidth().height(38.dp),
                                     shape = RoundedCornerShape(10.dp)
