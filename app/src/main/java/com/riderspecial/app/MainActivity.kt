@@ -135,7 +135,7 @@ fun LoginScreen(prefs: android.content.SharedPreferences, db: FirebaseFirestore,
     ) {
         item {
             Text("👑 Captain Smart Pro", color = Color(0xFF22C55E), fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text("High-Performance Driver Portal", color = Color.LightGray, fontSize = 12.sp)
+            Text("High-Performance Auto-Clicker Driver Portal", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(20.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, Color(0xFF22C55E).copy(alpha = 0.4f)), RoundedCornerShape(20.dp)),
@@ -277,7 +277,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
         },
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF0F172A)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, label = { Text("🎯 Bidding", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("🎯 Bidding", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
                 NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("💳 ₹49 Plan", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
                 NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("💬 Support", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
             }
@@ -309,7 +309,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
                             ) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text("⚡ Custom Ride Bidding & Lighting Control", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    Text("⚡ Auto-Clicker & Distance Rules", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                     OutlinedTextField(
                                         value = pickupKm,
                                         onValueChange = { pickupKm = it },
@@ -331,7 +331,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                                     OutlinedTextField(
                                         value = bidAmount,
                                         onValueChange = { bidAmount = it },
-                                        label = { Text("Your Bid Amount / MRP (₹)", color = Color(0xFF38BDF8)) },
+                                        label = { Text("Minimum Price / MRP Filter (₹)", color = Color(0xFF38BDF8)) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(10.dp),
@@ -339,7 +339,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                                     )
 
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Auto-Accept Rides", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text("0.00s Auto-Accept Engine", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                         Switch(checked = autoAccept, onCheckedChange = { autoAccept = it })
                                     }
 
@@ -348,13 +348,13 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                                             rtdb.child("live_riders").child(phone).setValue(
                                                 mapOf("phone" to phone, "pickup" to pickupKm, "drop" to dropKm, "bid" to bidAmount, "time" to System.currentTimeMillis())
                                             )
-                                            Toast.makeText(context, "✅ Successfully Saved & Live in Dibrugarh Zone!", Toast.LENGTH_LONG).show()
+                                            Toast.makeText(context, "✅ Rules Saved & Auto-Clicker Live in Dibrugarh!", Toast.LENGTH_LONG).show()
                                         },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
                                         modifier = Modifier.fillMaxWidth().height(50.dp),
                                         shape = RoundedCornerShape(12.dp)
                                     ) {
-                                        Text("🔥 Save & Go Live", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                        Text("🔥 Save & Run Auto-Clicker", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                     }
                                 }
                             }
@@ -542,7 +542,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                     Text("🛠️ SUPER ADMIN PANEL", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Button(
                         onClick = onLogout,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFRed)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                     ) {
@@ -661,7 +661,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                                     }
                                     Spacer(Modifier.height(4.dp))
                                     Text("Vehicle: ${r.vehicle}", color = Color(0xFF38BDF8), fontSize = 12.sp)
-                                    Text("Bid Settings -> Pickup: ${r.pickup}Km | Drop: ${r.drop}Km | Bid/MRP: ₹${r.bid}", color = Color(0xFFFACC15), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("Auto-Clicker Rules -> Pickup: ${r.pickup}Km | Drop: ${r.drop}Km | Min Price: ₹${r.bid}", color = Color(0xFFFACC15), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
