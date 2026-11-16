@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     onSurface = Color.White
                 )
             ) {
-                CaptainSmartCleanApp(tts)
+                CaptainSmartUltimateApp(tts)
             }
         }
     }
@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
     }
 }
 
-// Function to generate trip card image and save directly to phone Gallery
+// Function to save Trip Card Screenshot to Gallery
 fun saveTripCardToGallery(context: Context, company: String, amount: String, distance: String) {
     try {
         val width = 1080
@@ -109,7 +109,7 @@ fun saveTripCardToGallery(context: Context, company: String, amount: String, dis
                 bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
             }
         }
-        Toast.makeText(context, "📸 Trip Screenshot Saved to Gallery!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "📸 Screenshot Saved to Gallery!", Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         e.printStackTrace()
     }
@@ -117,111 +117,133 @@ fun saveTripCardToGallery(context: Context, company: String, amount: String, dis
 
 @SuppressLint("HardwareIds")
 @Composable
-fun CaptainSmartCleanApp(tts: TextToSpeech?) {
+fun CaptainSmartUltimateApp(tts: TextToSpeech?) {
     val context = LocalContext.current
     
-    var isRunning by remember { mutableStateOf(false) }
+    var autoAcceptOn by remember { mutableStateOf(true) }
+    var onlyRapidoOla by remember { mutableStateOf(true) }
+    var playSound by remember { mutableStateOf(true) }
+    var screenshotSave by remember { mutableStateOf(true) }
+
     var maxPickup by remember { mutableStateOf("1.0") }
-    var minPrice by remember { mutableStateOf("100") }
+    var minPrice by remember { mutableStateOf("20") }
     
-    // Captured Ride State
-    var hasRide by remember { mutableStateOf(false) }
-    var rideCompany by remember { mutableStateOf("") }
-    var rideAmount by remember { mutableStateOf("") }
-    var rideDistance by remember { mutableStateOf("") }
+    var hasRide by remember { mutableStateOf(true) }
+    var rideCompany by remember { mutableStateOf("Rapido") }
+    var rideAmount by remember { mutableStateOf("₹320") }
+    var rideDistance by remember { mutableStateOf("1.1 Km") }
+
+    var selectedTab by remember { mutableStateOf(0) }
 
     Scaffold(
         topBar = {
-            Surface(color = Color(0xFF0F172A), shadowElevation = 8.dp) {
+            Surface(color = Color(0xFF050B14), shadowElevation = 8.dp) {
                 Row(
-                    Modifier.fillMaxWidth().padding(16.dp),
+                    Modifier.fillMaxWidth().padding(14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("👑", fontSize = 22.sp)
+                        Text("👑", fontSize = 24.sp)
                         Spacer(Modifier.width(8.dp))
-                        Text("Captain Smart Pro", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Column {
+                            Text("Captain Smart Pro", color = Color(0xFF22C55E), fontWeight = FontWeight.Black, fontSize = 18.sp)
+                            Text("Auto Clicker • Ride Catcher • Order Split", color = Color.LightGray, fontSize = 10.sp)
+                        }
                     }
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = if (isRunning) Color(0xFF22C55E).copy(alpha = 0.2f) else Color.Red.copy(alpha = 0.2f),
-                        border = BorderStroke(1.dp, if (isRunning) Color(0xFF22C55E) else Color.Red)
-                    ) {
-                        Text(
-                            if (isRunning) "● AUTO-CLICKER ACTIVE" else "○ PAUSED",
-                            color = if (isRunning) Color(0xFF22C55E) else Color.Red,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF22C55E).copy(alpha = 0.2f),
+                            border = BorderStroke(1.dp, Color(0xFF22C55E))
+                        ) {
+                            Text("● ACTIVE", color = Color(0xFF22C55E), fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text("⚙️", fontSize = 20.sp)
                     }
                 }
             }
+        },
+        bottomBar = {
+            NavigationBar(containerColor = Color(0xFF050B14)) {
+                NavigationBarItem(selected = selectedTab == 0, onClick = { selectedTab = 0 }, label = { Text("Home", color = Color.White, fontSize = 11.sp) }, icon = { Text("🏠", fontSize = 18.sp) })
+                NavigationBarItem(selected = selectedTab == 1, onClick = { selectedTab = 1 }, label = { Text("Analytics", color = Color.White, fontSize = 11.sp) }, icon = { Text("📊", fontSize = 18.sp) })
+                NavigationBarItem(selected = selectedTab == 2, onClick = { selectedTab = 2 }, label = { Text("History", color = Color.White, fontSize = 11.sp) }, icon = { Text("🕒", fontSize = 18.sp) })
+                NavigationBarItem(selected = selectedTab == 3, onClick = { selectedTab = 3 }, label = { Text("Help", color = Color.White, fontSize = 11.sp) }, icon = { Text("❓", fontSize = 18.sp) })
+                NavigationBarItem(selected = selectedTab == 4, onClick = { selectedTab = 4 }, label = { Text("About", color = Color.White, fontSize = 11.sp) }, icon = { Text("ℹ️", fontSize = 18.sp) })
+            }
         }
     ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF020617), Color(0xFF0F172A))))) {
-            LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Box(Modifier.padding(pad).fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF020617), Color(0xFF0A1128), Color(0xFF020617))))) {
+            LazyColumn(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 
-                // Header Banner & Start/Stop Button
+                // Top Rapido Radar & Auto Accept Toggle Bar
                 item {
                     Card(
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF0B132B)),
                         border = BorderStroke(1.5.dp, Color(0xFF38BDF8).copy(alpha = 0.5f))
                     ) {
-                        Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Dibrugarh Fleet Dispatcher", color = Color(0xFF38BDF8), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.height(4.dp))
-                            Text("0.00s Instant Ride Catcher", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                            Spacer(Modifier.height(14.dp))
-                            
-                            Button(
-                                onClick = { isRunning = !isRunning },
-                                colors = ButtonDefaults.buttonColors(containerColor = if (isRunning) Color.Red else Color(0xFF22C55E)),
-                                modifier = Modifier.fillMaxWidth().height(56.dp),
-                                shape = RoundedCornerShape(16.dp)
+                        Row(
+                            Modifier.padding(14.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("🟡 Rapido", color = Color(0xFFFACC15), fontWeight = FontWeight.Black, fontSize = 22.sp)
+                                Text("📍 Dibrugarh Fleet Dispatcher", color = Color(0xFF38BDF8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(4.dp))
+                                Text("0.00s Instant Ride Catcher", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Black)
+                            }
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF16A34A))
                             ) {
-                                Text(
-                                    if (isRunning) "⏹ STOP AUTO-CLICKER" else "🚀 START 0.00s AUTO-CLICKER",
-                                    color = Color.Black,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 15.sp
-                                )
+                                Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("⚡", fontSize = 16.sp)
+                                    Text("Auto Accept", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text("ON", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Black)
+                                }
                             }
                         }
                     }
                 }
 
-                // Manual Test Button to simulate actual Ride Acceptance & Gallery Screenshot
+                // Action Buttons Row
                 item {
-                    Button(
-                        onClick = {
-                            val companies = listOf("Rapido", "Ola", "Uber")
-                            val fares = listOf("125", "180", "210", "145", "320")
-                            val distances = listOf("1.5 Km", "2.8 Km", "2.2 Km", "1.1 Km")
-                            
-                            rideCompany = companies.random()
-                            rideAmount = "₹${fares.random()}"
-                            rideDistance = distances.random()
-                            hasRide = true
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = {
+                                hasRide = true
+                                rideCompany = "Rapido"
+                                rideAmount = "₹320"
+                                rideDistance = "1.1 Km"
+                                val speech = "Ride Accepted! Rapido. Fare 320 rupees."
+                                tts?.speak(speech, TextToSpeech.QUEUE_FLUSH, null, null)
+                                if (screenshotSave) saveTripCardToGallery(context, rideCompany, rideAmount, rideDistance)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A)),
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFF38BDF8))
+                        ) {
+                            Text("📸 Test Ride Accept & Save", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
 
-                            // Speak Audio
-                            val speechText = "Ride Accepted! $rideCompany. Fare $rideAmount rupees."
-                            tts?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, null)
-
-                            // Save Screenshot to Gallery
-                            saveTripCardToGallery(context, rideCompany, rideAmount, rideDistance)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF38BDF8)),
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("🧪 Test Ride Accept & Save Screenshot", color = Color.Black, fontWeight = FontWeight.Bold)
+                        Button(
+                            onClick = { Toast.makeText(context, "Order Split Active!", Toast.LENGTH_SHORT).show() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF581C87)),
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFFC084FC))
+                        ) {
+                            Text("🔀 Order Split Form", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 
-                // Captured Ride Card
+                // Ride Accepted Card (Matches Screenshot style)
                 if (hasRide) {
                     item {
                         Card(
@@ -229,64 +251,197 @@ fun CaptainSmartCleanApp(tts: TextToSpeech?) {
                             colors = CardDefaults.cardColors(containerColor = Color(0xFF052E16)),
                             border = BorderStroke(2.dp, Color(0xFF22C55E))
                         ) {
-                            Column(Modifier.padding(18.dp)) {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("🎉 RIDE ACCEPTED ($rideCompany)", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("⚡ 0.00s Saved to Gallery", color = Color(0xFFFACC15), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Column(Modifier.padding(16.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("✅", fontSize = 16.sp)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Ride Accepted ($rideCompany)", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    }
+                                    Button(
+                                        onClick = {
+                                            if (screenshotSave) saveTripCardToGallery(context, rideCompany, rideAmount, rideDistance)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("📷 View Screenshot", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
+                                
                                 Spacer(Modifier.height(12.dp))
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+                                
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("Fare Amount", color = Color.LightGray, fontSize = 11.sp)
-                                        Text(rideAmount, color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                                        Text(rideAmount, color = Color(0xFFFACC15), fontWeight = FontWeight.Black, fontSize = 26.sp)
                                     }
                                     Divider(color = Color(0xFF22C55E).copy(alpha = 0.3f), modifier = Modifier.height(40.dp).width(1.dp))
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text("Distance to Go", color = Color.LightGray, fontSize = 11.sp)
-                                        Text(rideDistance, color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                                        Text(rideDistance, color = Color.White, fontWeight = FontWeight.Black, fontSize = 24.sp)
                                     }
                                 }
-                                Spacer(Modifier.height(14.dp))
-                                Button(
-                                    onClick = { hasRide = false },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
-                                    modifier = Modifier.fillMaxWidth().height(38.dp),
-                                    shape = RoundedCornerShape(10.dp)
+
+                                Spacer(Modifier.height(12.dp))
+
+                                // Audio Alert Bar with waveform simulation
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFFFACC15)
                                 ) {
-                                    Text("Dismiss Card", color = Color.White, fontSize = 12.sp)
+                                    Row(
+                                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("🔊 Audio Alert: $rideAmount | $rideDistance", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        Text("▶ ılıll|l|ll|l|", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // Settings & Filters Card
+                // Quick Navigation Grid (Live Stats, History, Notifications, Settings)
+                item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("📊 Live Stats", "🕒 History", "🔔 Notify (3)", "⚙️ Settings").forEachIndexed { index, title ->
+                            Card(
+                                onClick = { Toast.makeText(context, "$title Clicked", Toast.LENGTH_SHORT).show() },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                                border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f))
+                            ) {
+                                Column(
+                                    Modifier.padding(vertical = 12.dp, horizontal = 2.dp).fillMaxWidth(),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(title, fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Auto-Clicker Rules & Filters Card (Matches Screenshot)
                 item {
                     Card(
                         shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-                        border = BorderStroke(1.dp, Color(0xFF22C55E).copy(alpha = 0.3f))
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B132B)),
+                        border = BorderStroke(1.5.dp, Color(0xFF22C55E).copy(alpha = 0.5f))
                     ) {
-                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("⚙️ Auto-Clicker Rules & Filters", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("⚙️ Auto-Clicker Rules & Filters", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFFACC15)) {
+                                    Text(" Pro 👑 ", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(4.dp))
+                                }
+                            }
+
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OutlinedTextField(
+                                    value = maxPickup,
+                                    onValueChange = { maxPickup = it },
+                                    label = { Text("Max Pickup (Km)", fontSize = 11.sp) },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                OutlinedTextField(
+                                    value = minPrice,
+                                    onValueChange = { minPrice = it },
+                                    label = { Text("Min Price (₹)", fontSize = 11.sp) },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                            }
+
+                            // Toggles Grid
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("✔ Only Ola/Rapido", color = Color.White, fontSize = 12.sp)
+                                Switch(checked = onlyRapidoOla, onCheckedChange = { onlyRapidoOla = it })
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("🔊 Play Sound", color = Color.White, fontSize = 12.sp)
+                                Switch(checked = playSound, onCheckedChange = { playSound = it })
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("⚡ Auto Accept", color = Color.White, fontSize = 12.sp)
+                                Switch(checked = autoAcceptOn, onCheckedChange = { autoAcceptOn = it })
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("📸 Screenshot Save", color = Color.White, fontSize = 12.sp)
+                                Switch(checked = screenshotSave, onCheckedChange = { screenshotSave = it })
+                            }
+
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = { Toast.makeText(context, "Settings Reset", Toast.LENGTH_SHORT).show() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Reset", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Button(
+                                    onClick = { Toast.makeText(context, "Test Mode Active", Toast.LENGTH_SHORT).show() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Test Mode", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Button(
+                                    onClick = { Toast.makeText(context, "Settings Saved Successfully!", Toast.LENGTH_SHORT).show() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
+                                    modifier = Modifier.weight(1.2f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Save Settings", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Live Earnings Dashboard Card
+                item {
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF050B14)),
+                        border = BorderStroke(1.5.dp, Color(0xFF22C55E).copy(alpha = 0.6f))
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text("📈 Live Earnings Dashboard", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Today ▾", color = Color.LightGray, fontSize = 12.sp)
+                            }
                             
-                            OutlinedTextField(
-                                value = maxPickup,
-                                onValueChange = { maxPickup = it },
-                                label = { Text("Max Pickup Distance (Km)") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            )
-                            
-                            OutlinedTextField(
-                                value = minPrice,
-                                onValueChange = { minPrice = it },
-                                label = { Text("Minimum Price / MRP Filter (₹)") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF064E3B)), modifier = Modifier.weight(1f).padding(4.dp)) {
+                                    Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Total Earnings", color = Color.LightGray, fontSize = 9.sp)
+                                        Text("₹1,250", color = Color(0xFF22C55E), fontWeight = FontWeight.Black, fontSize = 16.sp)
+                                    }
+                                }
+                                Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF1E3A8A)), modifier = Modifier.weight(1f).padding(4.dp)) {
+                                    Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Total Rides", color = Color.LightGray, fontSize = 9.sp)
+                                        Text("12", color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                                    }
+                                }
+                                Card(shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF581C87)), modifier = Modifier.weight(1f).padding(4.dp)) {
+                                    Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Total Distance", color = Color.LightGray, fontSize = 9.sp)
+                                        Text("14.8 Km", color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
