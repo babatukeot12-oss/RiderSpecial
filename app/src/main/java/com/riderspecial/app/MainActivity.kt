@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -15,14 +14,11 @@ import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var prefs: android.content.SharedPreferences
     private var isSubscribedOrTrialActive = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        prefs = getSharedPreferences("RiderSpecialPrefs", MODE_PRIVATE)
-
         // 1. Check Device-Locked 7-Day Trial & Subscription Status
         checkDeviceSubscriptionAndTrial()
 
@@ -37,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkDeviceSubscriptionAndTrial() {
+        val prefs = getSharedPreferences("RiderSpecialPrefs", MODE_PRIVATE)
         var deviceId = prefs.getString("device_hardware_id", null)
         
         if (deviceId == null) {
@@ -61,25 +58,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSubscriptionLockScreen() {
-        // Programmatic secure dialog to avoid missing layout errors
-        val dialog = Dialog(this)
-        val layout = LinearLayout(this).apply {
+        val dialog = Dialog(this@MainActivity)
+        val layout = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(50, 50, 50, 50)
         }
 
-        val title = TextView(this).apply {
+        val title = TextView(this@MainActivity).apply {
             text = "Captain Smart Pro - Subscription"
             textSize = 20f
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
 
-        val message = TextView(this).apply {
+        val message = TextView(this@MainActivity).apply {
             text = "\nYour 7-Day Free Trial has expired!\n\nPay ₹49 for 30 Days Subscription using Admin QR code.\n"
             textSize = 15f
         }
 
-        val btnPay = Button(this).apply {
+        val btnPay = Button(this@MainActivity).apply {
             text = "Pay ₹49 via UPI / QR"
             setOnClickListener {
                 val upiUri = Uri.parse("upi://pay?pa=babatukeot@paytm&pn=DinaKeot&am=49.00&cu=INR")
@@ -87,15 +83,15 @@ class MainActivity : AppCompatActivity() {
                 try {
                     startActivity(intent)
                 } catch (e: Exception) {
-                    Toast.makeText(context, "Please scan Admin QR code", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "Please scan Admin QR code", Toast.LENGTH_LONG).show()
                 }
             }
         }
 
-        val btnUpload = Button(this).apply {
+        val btnUpload = Button(this@MainActivity).apply {
             text = "Upload Payment Screenshot"
             setOnClickListener {
-                Toast.makeText(context, "Opening gallery for screenshot upload...", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Opening gallery for screenshot upload...", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -110,7 +106,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initAppDashboard() {
-        Toast.makeText(this, "Welcome to Captain Smart Pro!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this@MainActivity, "Welcome to Captain Smart Pro!", Toast.LENGTH_SHORT).show()
     }
 
     fun verifyAdminPin(enteredPin: String): Boolean {
