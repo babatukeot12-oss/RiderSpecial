@@ -30,7 +30,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import java.io.OutputStream
 import java.util.*
 
@@ -53,7 +52,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                     onSurface = Color.White
                 )
             ) {
-                CaptainSmartMasterApp(tts)
+                CaptainSmartSolidApp(tts)
             }
         }
     }
@@ -122,7 +121,7 @@ fun saveTripCardToGallery(context: Context, company: String, amount: String, dis
 
 @SuppressLint("HardwareIds")
 @Composable
-fun CaptainSmartMasterApp(tts: TextToSpeech?) {
+fun CaptainSmartSolidApp(tts: TextToSpeech?) {
     val context = LocalContext.current
     
     // States
@@ -152,7 +151,7 @@ fun CaptainSmartMasterApp(tts: TextToSpeech?) {
     var showOrderSplitDialog by remember { mutableStateOf(false) }
     var showProDialog by remember { mutableStateOf(false) }
 
-    // Function to accept a ride
+    // Function to accept a ride (Strictly on demand / manual trigger or actual event)
     fun triggerRideAccept(company: String, amountStr: String, distStr: String) {
         val cleanAmount = amountStr.replace("₹", "").toIntOrNull() ?: 100
         val cleanDist = distStr.replace(" Km", "").toDoubleOrNull() ?: 1.0
@@ -176,26 +175,6 @@ fun CaptainSmartMasterApp(tts: TextToSpeech?) {
         Toast.makeText(context, "🎉 Ride Captured Successfully!", Toast.LENGTH_SHORT).show()
     }
 
-    // Auto Clicker background loop when activated
-    LaunchedEffect(isActivated, autoAcceptOn) {
-        if (isActivated && autoAcceptOn) {
-            while (isActivated && autoAcceptOn) {
-                delay(6000) // Radar scan interval
-                val companies = listOf("Rapido", "Ola", "Uber")
-                val fares = listOf(125, 180, 210, 145, 320, 95)
-                val distances = listOf("1.5 Km", "2.8 Km", "2.2 Km", "1.1 Km", "3.0 Km")
-                
-                val comp = companies.random()
-                val fare = fares.random()
-                val dist = distances.random()
-
-                if (fare >= (minPrice.toIntOrNull() ?: 20)) {
-                    triggerRideAccept(comp, "₹$fare", dist)
-                }
-            }
-        }
-    }
-
     Scaffold(
         topBar = {
             Surface(color = Color(0xFF050B14), shadowElevation = 8.dp) {
@@ -217,7 +196,7 @@ fun CaptainSmartMasterApp(tts: TextToSpeech?) {
                         Button(
                             onClick = { 
                                 isActivated = !isActivated
-                                Toast.makeText(context, if (isActivated) "⚡ Auto-Clicker ACTIVATED!" else "⏹ Auto-Clicker DEACTIVATED", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, if (isActivated) "⚡ Auto-Clicker ACTIVATED (Standby)" else "⏹ Auto-Clicker DEACTIVATED", Toast.LENGTH_SHORT).show()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = if (isActivated) Color(0xFF22C55E) else Color.Red),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
@@ -261,7 +240,7 @@ fun CaptainSmartMasterApp(tts: TextToSpeech?) {
                                         Text("🟡 Rapido / Ola / Uber", color = Color(0xFFFACC15), fontWeight = FontWeight.Black, fontSize = 18.sp)
                                         Text("📍 Dibrugarh Fleet Dispatcher", color = Color(0xFF38BDF8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.height(4.dp))
-                                        Text(if (isActivated) "0.00s Instant Catcher (Running)" else "Paused (Deactivated)", color = if (isActivated) Color(0xFF22C55E) else Color.Red, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text(if (isActivated) "0.00s Instant Catcher (Standby/Ready)" else "Paused (Deactivated)", color = if (isActivated) Color(0xFF22C55E) else Color.Red, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Card(
                                         shape = RoundedCornerShape(14.dp),
@@ -307,7 +286,7 @@ fun CaptainSmartMasterApp(tts: TextToSpeech?) {
                             }
                         }
 
-                        // Last Accepted Ride Card
+                        // Last Accepted Ride Card (Only shows when triggered)
                         if (lastRide != null) {
                             item {
                                 Card(
@@ -543,7 +522,7 @@ fun CaptainSmartMasterApp(tts: TextToSpeech?) {
                         Text("🕒 Completed Ride History", color = Color(0xFF38BDF8), fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         if (rideHistoryList.isEmpty()) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("No rides captured yet. Start auto-clicker or use Test Ride.", color = Color.Gray, fontSize = 13.sp)
+                                Text("No rides captured yet. Use 'Test Ride Accept' on Home.", color = Color.Gray, fontSize = 13.sp)
                             }
                         } else {
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -569,9 +548,9 @@ fun CaptainSmartMasterApp(tts: TextToSpeech?) {
                         Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text("How to use Captain Smart Pro:", fontWeight = FontWeight.Bold, color = Color.White)
-                                Text("1. Click the Activate button on top to run the 0.00s radar.", color = Color.LightGray, fontSize = 13.sp)
+                                Text("1. Tap the Activate button on top to ready the 0.00s radar.", color = Color.LightGray, fontSize = 13.sp)
                                 Text("2. Set your Max Pickup and Min Price filters.", color = Color.LightGray, fontSize = 13.sp)
-                                Text("3. When a matching ride arrives, it auto-accepts, speaks audio, and saves the screenshot to your Gallery!", color = Color.LightGray, fontSize = 13.sp)
+                                Text("3. App stays completely peaceful until a ride is accepted or tested!", color = Color.LightGray, fontSize = 13.sp)
                             }
                         }
                     }
@@ -593,7 +572,7 @@ fun CaptainSmartMasterApp(tts: TextToSpeech?) {
         }
     }
 
-    // Dialog Modals for quick buttons
+    // Dialog Modals
     if (showStatsDialog) {
         AlertDialog(
             onDismissRequest = { showStatsDialog = false },
