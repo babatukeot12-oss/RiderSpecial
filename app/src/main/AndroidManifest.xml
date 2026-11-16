@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- 1. इंटरनेट और बैकग्राउंड में चलने की अनुमति -->
+    <!-- 1. इंटरनेट की एक्सेस व चालू करने की अनुमति -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
-    <application android:icon="@drawable/rider_special_520x500
-android:roundIcon="@drawable/rider_special_520x500
+    <application
+        android:icon="@drawable/rider_special_520x500"
+        android:roundIcon="@drawable/rider_special_520x500"
         android:allowBackup="true"
         android:label="Captain Smart - Rider Special"
         android:supportsRtl="true"
@@ -23,7 +24,7 @@ android:roundIcon="@drawable/rider_special_520x500
             </intent-filter>
         </activity>
 
-        <!-- 3. 0.00s Auto-Accept की Accessibility सर्विस -->
+        <!-- 3. 0.00s ऑटो-असेप्ट की Accessibility सर्विस -->
         <service
             android:name=".RideAutoAcceptService"
             android:exported="true"
