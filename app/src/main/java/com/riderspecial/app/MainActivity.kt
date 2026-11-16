@@ -58,41 +58,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSubscriptionLockScreen() {
-        val dialog = Dialog(this@MainActivity)
-        val layout = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(50, 50, 50, 50)
-        }
+        val dialog = Dialog(this)
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        layout.setPadding(50, 50, 50, 50)
 
-        val title = TextView(this@MainActivity).apply {
-            text = "Captain Smart Pro - Subscription"
-            textSize = 20f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-        }
+        val title = TextView(this)
+        title.text = "Captain Smart Pro - Subscription"
+        title.textSize = 20f
 
-        val message = TextView(this@MainActivity).apply {
-            text = "\nYour 7-Day Free Trial has expired!\n\nPay ₹49 for 30 Days Subscription using Admin QR code.\n"
-            textSize = 15f
-        }
+        val message = TextView(this)
+        message.text = "\nYour 7-Day Free Trial has expired!\n\nPay ₹49 for 30 Days Subscription using Admin QR code.\n"
+        message.textSize = 15f
 
-        val btnPay = Button(this@MainActivity).apply {
-            text = "Pay ₹49 via UPI / QR"
-            setOnClickListener {
-                val upiUri = Uri.parse("upi://pay?pa=babatukeot@paytm&pn=DinaKeot&am=49.00&cu=INR")
-                val intent = Intent(Intent.ACTION_VIEW, upiUri)
-                try {
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    Toast.makeText(this@MainActivity, "Please scan Admin QR code", Toast.LENGTH_LONG).show()
-                }
+        val btnPay = Button(this)
+        btnPay.text = "Pay ₹49 via UPI / QR"
+        btnPay.setOnClickListener {
+            val upiUri = Uri.parse("upi://pay?pa=babatukeot@paytm&pn=DinaKeot&am=49.00&cu=INR")
+            val intent = Intent(Intent.ACTION_VIEW, upiUri)
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Please scan Admin QR code", Toast.LENGTH_LONG).show()
             }
         }
 
-        val btnUpload = Button(this@MainActivity).apply {
-            text = "Upload Payment Screenshot"
-            setOnClickListener {
-                Toast.makeText(this@MainActivity, "Opening gallery for screenshot upload...", Toast.LENGTH_SHORT).show()
-            }
+        val btnUpload = Button(this)
+        btnUpload.text = "Upload Payment Screenshot"
+        btnUpload.setOnClickListener {
+            Toast.makeText(this, "Opening gallery for screenshot upload...", Toast.LENGTH_SHORT).show()
         }
 
         layout.addView(title)
@@ -106,7 +100,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initAppDashboard() {
-        Toast.makeText(this@MainActivity, "Welcome to Captain Smart Pro!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Welcome to Captain Smart Pro!", Toast.LENGTH_SHORT).show()
     }
 
     fun verifyAdminPin(enteredPin: String): Boolean {
