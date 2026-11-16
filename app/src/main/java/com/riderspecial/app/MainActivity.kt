@@ -277,7 +277,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
         },
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF0F172A)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("🎯 Bidding", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, label = { Text("🎯 Bidding", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
                 NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("💳 ₹49 Plan", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
                 NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("💬 Support", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
             }
@@ -542,7 +542,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                     Text("🛠️ SUPER ADMIN PANEL", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Button(
                         onClick = onLogout,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFRed)),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                     ) {
