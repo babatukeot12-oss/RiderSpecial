@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -45,8 +46,8 @@ class MainActivity : ComponentActivity() {
                 colorScheme = darkColorScheme(
                     primary = Color(0xFF22C55E),
                     secondary = Color(0xFF38BDF8),
-                    background = Color(0xFF070A12),
-                    surface = Color(0xFF131D31),
+                    background = Color(0xFF030712),
+                    surface = Color(0xFF0F172A),
                     onPrimary = Color.Black,
                     onBackground = Color.White,
                     onSurface = Color.White
@@ -81,24 +82,24 @@ fun CaptainSmartApp() {
 
     if (showSplash) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF070A12), Color(0xFF131D31), Color(0xFF070A12)))),
+            modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF030712), Color(0xFF0F172A), Color(0xFF052E16)))),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Surface(
-                    modifier = Modifier.size(100.dp),
+                    modifier = Modifier.size(110.dp),
                     shape = CircleShape,
-                    color = Color(0xFF22C55E).copy(alpha = 0.2f),
+                    color = Color(0xFF22C55E).copy(alpha = 0.15f),
                     border = BorderStroke(2.dp, Color(0xFF22C55E))
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text("👑", fontSize = 48.sp)
+                        Text("👑", fontSize = 52.sp)
                     }
                 }
-                Spacer(Modifier.height(18.dp))
-                Text("CAPTAIN SMART PRO", color = Color(0xFF22C55E), fontSize = 26.sp, fontWeight = FontWeight.Black, letterSpacing = 1.5.sp)
+                Spacer(Modifier.height(20.dp))
+                Text("CAPTAIN SMART PRO", color = Color(0xFF22C55E), fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                 Spacer(Modifier.height(6.dp))
-                Text("Dibrugarh Premium Fleet & Bidding Hub", color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("Dibrugarh's Ultimate Lighting Fleet Hub", color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     } else if (loggedInPhone.isEmpty()) {
@@ -128,22 +129,22 @@ fun LoginScreen(prefs: android.content.SharedPreferences, db: FirebaseFirestore,
     var pin by remember { mutableStateOf("") }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF070A12), Color(0xFF131D31)))).padding(20.dp),
+        modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF030712), Color(0xFF0F172A)))).padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         item {
             Text("👑 Captain Smart Pro", color = Color(0xFF22C55E), fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text("Dibrugarh's Smart Ride Dispatcher", color = Color.LightGray, fontSize = 12.sp)
+            Text("High-Performance Driver Portal", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(20.dp))
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, Color(0xFF22C55E).copy(alpha = 0.4f)), RoundedCornerShape(20.dp)),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
             ) {
                 Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Select Your Vehicle Type:", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Select Vehicle Type:", color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                         listOf("Bike 🏍️", "Auto 🛺", "Taxi 🚕", "EV ⚡").forEach { v ->
@@ -160,7 +161,7 @@ fun LoginScreen(prefs: android.content.SharedPreferences, db: FirebaseFirestore,
                     OutlinedTextField(
                         value = phone,
                         onValueChange = { if (it.length <= 10) phone = it },
-                        label = { Text("10-digit Mobile Number", color = Color.LightGray) },
+                        label = { Text("10-digit Mobile Number", color = Color(0xFF94A3B8)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -193,7 +194,7 @@ fun LoginScreen(prefs: android.content.SharedPreferences, db: FirebaseFirestore,
                     OutlinedTextField(
                         value = pin,
                         onValueChange = { pin = it },
-                        label = { Text("Admin PIN (9954)", color = Color.LightGray) },
+                        label = { Text("Admin PIN (9954)", color = Color(0xFF94A3B8)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -253,7 +254,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
 
     Scaffold(
         topBar = {
-            Surface(color = Color(0xFF131D31), shadowElevation = 6.dp) {
+            Surface(color = Color(0xFF0F172A), shadowElevation = 8.dp) {
                 Row(
                     Modifier.fillMaxWidth().padding(14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -275,14 +276,14 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = Color(0xFF131D31)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("🎯 Bidding", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("💳 ₹49 Plan", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("💬 Support", color = Color.White) }, icon = {})
+            NavigationBar(containerColor = Color(0xFF0F172A)) {
+                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("🎯 Bidding", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("💳 ₹49 Plan", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("💬 Support", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
             }
         }
     ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize().background(Color(0xFF070A12))) {
+        Box(Modifier.padding(pad).fillMaxSize().background(Color(0xFF030712))) {
             when (tab) {
                 0 -> {
                     LazyColumn(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -303,16 +304,16 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                         }
                         item {
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, Color(0xFF22C55E).copy(alpha = 0.5f)), RoundedCornerShape(16.dp)),
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31))
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))
                             ) {
                                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text("⚡ Custom Ride Bidding & Control", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    Text("⚡ Custom Ride Bidding & Lighting Control", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 15.sp)
                                     OutlinedTextField(
                                         value = pickupKm,
                                         onValueChange = { pickupKm = it },
-                                        label = { Text("Max Pickup Distance (Km)", color = Color.LightGray) },
+                                        label = { Text("Max Pickup Distance (Km)", color = Color(0xFF38BDF8)) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(10.dp),
@@ -321,7 +322,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                                     OutlinedTextField(
                                         value = dropKm,
                                         onValueChange = { dropKm = it },
-                                        label = { Text("Max Drop-off Distance (Km)", color = Color.LightGray) },
+                                        label = { Text("Max Drop-off Distance (Km)", color = Color(0xFF38BDF8)) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(10.dp),
@@ -330,7 +331,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                                     OutlinedTextField(
                                         value = bidAmount,
                                         onValueChange = { bidAmount = it },
-                                        label = { Text("Your Bid Amount (₹)", color = Color.LightGray) },
+                                        label = { Text("Your Bid Amount / MRP (₹)", color = Color(0xFF38BDF8)) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(10.dp),
@@ -439,7 +440,7 @@ fun ChatScreen(phone: String, isAdmin: Boolean, rtdb: DatabaseReference) {
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(list) { (s, t) ->
                 Surface(
-                    color = if (s == "Admin") Color(0xFF131D31) else Color(0xFF22C55E).copy(alpha = 0.2f),
+                    color = if (s == "Admin") Color(0xFF0F172A) else Color(0xFF22C55E).copy(alpha = 0.2f),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(Modifier.padding(10.dp)) {
@@ -532,7 +533,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
 
     Scaffold(
         topBar = {
-            Surface(color = Color(0xFF131D31), shadowElevation = 6.dp) {
+            Surface(color = Color(0xFF0F172A), shadowElevation = 8.dp) {
                 Row(
                     Modifier.fillMaxWidth().padding(14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -551,16 +552,16 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
             }
         },
         bottomBar = {
-            NavigationBar(containerColor = Color(0xFF131D31)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, label = { Text("💳 Payments", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("📷 QR", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("👥 Profiles", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 3, onClick = { tab == 3 }, label = { Text("📍 GPS", color = Color.White) }, icon = {})
-                NavigationBarItem(selected = tab == 4, onClick = { tab == 4 }, label = { Text("💬 Chat", color = Color.White) }, icon = {})
+            NavigationBar(containerColor = Color(0xFF0F172A)) {
+                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("💳 Payments", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("📷 QR", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("👥 Profiles", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 3, onClick = { tab == 3 }, label = { Text("📍 GPS", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 4, onClick = { tab == 4 }, label = { Text("💬 Chat", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
             }
         }
     ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize().background(Color(0xFF070A12))) {
+        Box(Modifier.padding(pad).fillMaxSize().background(Color(0xFF030712))) {
             when (tab) {
                 0 -> {
                     LazyColumn(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -568,7 +569,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                             item { Text("No pending payment screenshots.", color = Color.LightGray, fontSize = 13.sp) }
                         }
                         items(payments) { item ->
-                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31))) {
+                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))) {
                                 Column(Modifier.padding(14.dp)) {
                                     Text("Rider Phone: ${item.phone}", fontWeight = FontWeight.Bold, color = Color(0xFF22C55E), fontSize = 14.sp)
                                     Spacer(Modifier.height(8.dp))
@@ -617,7 +618,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                             item { Text("No registered riders found.", color = Color.LightGray, fontSize = 13.sp) }
                         }
                         items(riders) { r ->
-                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31))) {
+                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))) {
                                 Column(Modifier.padding(14.dp)) {
                                     Text("Phone: ${r.phone}", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
                                     Text("Vehicle: ${r.vehicle}", color = Color(0xFF22C55E), fontSize = 12.sp)
@@ -652,7 +653,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                             item { Text("No active riders online right now.", color = Color.LightGray, fontSize = 13.sp) }
                         }
                         items(liveRiders) { r ->
-                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF131D31))) {
+                            Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A))) {
                                 Column(Modifier.padding(14.dp)) {
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                         Text("Captain: ${r.phone}", fontWeight = FontWeight.Bold, color = Color.White)
@@ -660,7 +661,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                                     }
                                     Spacer(Modifier.height(4.dp))
                                     Text("Vehicle: ${r.vehicle}", color = Color(0xFF38BDF8), fontSize = 12.sp)
-                                    Text("Bid Settings -> Pickup: ${r.pickup}Km | Drop: ${r.drop}Km | Bid: ₹${r.bid}", color = Color.LightGray, fontSize = 11.sp)
+                                    Text("Bid Settings -> Pickup: ${r.pickup}Km | Drop: ${r.drop}Km | Bid/MRP: ₹${r.bid}", color = Color(0xFFFACC15), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -672,7 +673,7 @@ fun AdminDashboard(db: FirebaseFirestore, rtdb: DatabaseReference, onLogout: () 
                             OutlinedTextField(
                                 value = chatPhone,
                                 onValueChange = { chatPhone = it },
-                                label = { Text("Rider Phone Number", color = Color.LightGray) },
+                                label = { Text("Rider Phone Number", color = Color(0xFF94A3B8)) },
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White, focusedBorderColor = Color(0xFF38BDF8), unfocusedBorderColor = Color.Gray)
