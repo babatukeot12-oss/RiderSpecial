@@ -76,7 +76,7 @@ fun CaptainSmartApp() {
     var isAdmin by remember { mutableStateOf(prefs.getBoolean("admin", false)) }
 
     LaunchedEffect(Unit) {
-        delay(1400)
+        delay(1200)
         showSplash = false
     }
 
@@ -99,7 +99,7 @@ fun CaptainSmartApp() {
                 Spacer(Modifier.height(20.dp))
                 Text("CAPTAIN SMART PRO", color = Color(0xFF22C55E), fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
                 Spacer(Modifier.height(6.dp))
-                Text("Dibrugarh's Ultimate Lighting Fleet Hub", color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("Dibrugarh Auto-Clicker & Fleet Hub", color = Color(0xFF38BDF8), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     } else if (loggedInPhone.isEmpty()) {
@@ -135,7 +135,7 @@ fun LoginScreen(prefs: android.content.SharedPreferences, db: FirebaseFirestore,
     ) {
         item {
             Text("👑 Captain Smart Pro", color = Color(0xFF22C55E), fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text("High-Performance Auto-Clicker Driver Portal", color = Color.LightGray, fontSize = 12.sp)
+            Text("Auto-Clicker & Ride Dispatch Portal", color = Color.LightGray, fontSize = 12.sp)
             Spacer(Modifier.height(20.dp))
             Card(
                 modifier = Modifier.fillMaxWidth().border(BorderStroke(1.dp, Color(0xFF22C55E).copy(alpha = 0.4f)), RoundedCornerShape(20.dp)),
@@ -277,7 +277,7 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
         },
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF0F172A)) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("🎯 Bidding", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
+                NavigationBarItem(selected = tab == 0, onClick = { tab == 0 }, label = { Text("🎯 Auto-Clicker", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
                 NavigationBarItem(selected = tab == 1, onClick = { tab == 1 }, label = { Text("💳 ₹49 Plan", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
                 NavigationBarItem(selected = tab == 2, onClick = { tab == 2 }, label = { Text("💬 Support", color = Color.White, fontWeight = FontWeight.Bold) }, icon = {})
             }
@@ -296,8 +296,8 @@ fun RiderDashboard(phone: String, db: FirebaseFirestore, rtdb: DatabaseReference
                                     Text("🟢", fontSize = 18.sp)
                                     Spacer(Modifier.width(10.dp))
                                     Column {
-                                        Text("Status: Online & Ready", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp)
-                                        Text("Nearest Dispatch & 0.00s Auto-Accept Active", fontSize = 11.sp, color = Color.DarkGray)
+                                        Text("Auto-Clicker Status: Online & Active", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp)
+                                        Text("0.00s Ride Acceptance Engine Running", fontSize = 11.sp, color = Color.DarkGray)
                                     }
                                 }
                             }
