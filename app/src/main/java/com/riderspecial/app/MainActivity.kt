@@ -80,7 +80,7 @@ class MainActivity : Activity() {
         header.addView(titleTv)
         header.addView(subTitle)
 
-        // Status Banner
+        // Status Banner matching your exact screenshot style
         val statusBanner = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(if (isSubscribedOrTrialActive) Color.parseColor("#06D6A0") else Color.parseColor("#EF476F"))
@@ -98,7 +98,7 @@ class MainActivity : Activity() {
 
         val s1 = TextView(this).apply { text = ""; setPadding(0, 15, 0, 0) }
 
-        // Dispatcher Card
+        // Dispatcher Card matching screenshot
         val dispatcherCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#0B132B"))
@@ -134,7 +134,7 @@ class MainActivity : Activity() {
 
         val s2 = TextView(this).apply { text = ""; setPadding(0, 15, 0, 0) }
 
-        // Action Buttons Row
+        // Action Buttons Row (Test Ride & Order Split)
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             weightSum = 2f
@@ -218,7 +218,7 @@ class MainActivity : Activity() {
         earnCard.addView(eTitle)
         earnCard.addView(earnRow)
 
-        // Bottom Navigation Bar
+        // Bottom Navigation Bar matching your exact design
         val bottomNav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             weightSum = 5f
