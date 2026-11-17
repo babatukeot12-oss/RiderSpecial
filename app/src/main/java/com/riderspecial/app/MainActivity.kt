@@ -11,28 +11,28 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Captain Smart Pro - 0.00s Auto-Accept Active
-        Toast.makeText(this, "Captain Smart Pro: Auto-Accept Active!", Toast.LENGTH_LONG).show()
+        val currentContext = this
+        Toast.makeText(currentContext, "Captain Smart Pro: Auto-Accept Active!", Toast.LENGTH_LONG).show()
 
-        // Open Admin Security Check on Launch
         showAdminSecurityDialog()
     }
 
     private fun showAdminSecurityDialog() {
-        val builder = AlertDialog.Builder(this)
+        val currentContext = this
+        val builder = AlertDialog.Builder(currentContext)
         builder.setTitle("Admin Security Check")
         builder.setMessage("Enter Master PIN (dinakeot1990) to access management room:")
 
-        val input = EditText(this)
+        val input = EditText(currentContext)
         input.hint = "Enter PIN"
         builder.setView(input)
 
         builder.setPositiveButton("LOGIN") { dialog, _ ->
             val pin = input.text.toString().trim()
             if (pin == "dinakeot1990") {
-                Toast.makeText(this, "Admin Login Successful!", Toast.LENGTH_LONG).show()
+                Toast.makeText(currentContext, "Admin Login Successful!", Toast.LENGTH_LONG).show()
             } else {
-                Toast.makeText(this, "Invalid Master PIN!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(currentContext, "Invalid Master PIN!", Toast.LENGTH_SHORT).show()
             }
             dialog.dismiss()
         }
