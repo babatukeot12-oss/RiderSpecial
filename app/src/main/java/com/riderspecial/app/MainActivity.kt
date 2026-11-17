@@ -11,23 +11,21 @@ import android.widget.*
 
 class MainActivity : Activity() {
 
-    private var selectedVehicle = "Scooty"
+    private var selectedVehicle = "Bike"
     private var adminUpiId = "babatukeot@paytm"
-    private var broadcastMsg = "🚀 Welcome to Captain Smart Pro! 0.00s Instant Auto-Accept active for all riders."
+    private var broadcastMsg = "🚀 Welcome to Captain Smart Pro! 0.00s Instant Auto-Accept active."
     private var communityLinks = "FB: facebook.com | YT: youtube.com | WA: whatsapp.com"
-    
-    // Rider Custom Filters
     private var maxPickupKm = "1.0"
     private var minFareAmt = "20"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        renderAppHome()
+        renderExact3DDashboard()
     }
 
-    private fun renderAppHome() {
+    private fun renderExact3DDashboard() {
         val rootScroll = ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#060A17"))
+            setBackgroundColor(Color.parseColor("#030712"))
             isFillViewport = true
         }
 
@@ -36,38 +34,38 @@ class MainActivity : Activity() {
             setPadding(25, 30, 25, 30)
         }
 
-        // Top Header 3D Crown Look
+        // 3D Header with Crown & Glow Look
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 20)
+            setPadding(0, 0, 0, 15)
         }
         val crownTv = TextView(this).apply {
             text = "👑"
-            textSize = 28f
+            textSize = 30f
             gravity = Gravity.CENTER
         }
         val titleTv = TextView(this).apply {
             text = "Captain Smart Pro"
             textSize = 24f
-            setTextColor(Color.parseColor("#06D6A0"))
+            setTextColor(Color.parseColor("#00FF66"))
             setTypeface(null, android.graphics.Typeface.BOLD)
             gravity = Gravity.CENTER
         }
         val subTitle = TextView(this).apply {
             text = "Auto-Clicker & Ride Dispatch Portal"
             textSize = 12f
-            setTextColor(Color.parseColor("#8D99AE"))
+            setTextColor(Color.parseColor("#00E1FF"))
             gravity = Gravity.CENTER
         }
         header.addView(crownTv)
         header.addView(titleTv)
         header.addView(subTitle)
 
-        // Live Broadcast Banner
-        val broadcastCard = LinearLayout(this).apply {
+        // Live Announcement Bar
+        val banner = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#111A30"))
+            setBackgroundColor(Color.parseColor("#0B132B"))
             setPadding(20, 15, 20, 15)
         }
         val bText = TextView(this).apply {
@@ -75,61 +73,61 @@ class MainActivity : Activity() {
             textSize = 12f
             setTextColor(Color.parseColor("#FFD166"))
         }
-        broadcastCard.addView(bText)
+        banner.addView(bText)
 
-        val space0 = TextView(this).apply { text = ""; setPadding(0, 15, 0, 0) }
+        val s0 = TextView(this).apply { text = ""; setPadding(0, 15, 0, 0) }
 
-        // 1. Admin Login Section (Hidden PIN 3479)
+        // Admin Login 3D Card (Hidden PIN 3479)
         val adminCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#111A30"))
             setPadding(25, 25, 25, 25)
         }
-        val adminTitle = TextView(this).apply {
+        val aTitle = TextView(this).apply {
             text = "🛡️ Admin Login"
             textSize = 16f
             setTextColor(Color.parseColor("#4CC9F0"))
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
-        val adminDesc = TextView(this).apply {
-            text = "Manage Riders, Broadcasts & Payments"
+        val aDesc = TextView(this).apply {
+            text = "Manage Fleet, Broadcasts & Payments"
             textSize = 11f
             setTextColor(Color.parseColor("#8D99AE"))
             setPadding(0, 5, 0, 15)
         }
-        val btnAdminLogin = Button(this).apply {
-            text = "Admin Login Now"
+        val btnAdmin = Button(this).apply {
+            text = "Login Now"
             setBackgroundColor(Color.parseColor("#3A86EF"))
             setTextColor(Color.WHITE)
             setOnClickListener { showAdminPinDialog() }
         }
-        adminCard.addView(adminTitle)
-        adminCard.addView(adminDesc)
-        adminCard.addView(btnAdminLogin)
+        adminCard.addView(aTitle)
+        adminCard.addView(aDesc)
+        adminCard.addView(btnAdmin)
 
-        val space1 = TextView(this).apply { text = ""; setPadding(0, 15, 0, 0) }
+        val s1 = TextView(this).apply { text = ""; setPadding(0, 15, 0, 0) }
 
-        // 2. Rider Login & Vehicle Selector Section
+        // Rider Login & Vehicle Selector Card (Exact match)
         val riderCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#111A30"))
             setPadding(25, 25, 25, 25)
         }
-        val riderTitle = TextView(this).apply {
-            text = "🛵 Rider Login & Workspace"
+        val rTitle = TextView(this).apply {
+            text = "🛵 Rider Login"
             textSize = 16f
             setTextColor(Color.parseColor("#06D6A0"))
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
-        val riderDesc = TextView(this).apply {
-            text = "0.00s Instant Auto-Accept & Proximity Priority"
+        val rDesc = TextView(this).apply {
+            text = "Accept Ride & Earn Income (0.00s)"
             textSize = 11f
             setTextColor(Color.parseColor("#8D99AE"))
             setPadding(0, 5, 0, 15)
         }
 
         val vLabel = TextView(this).apply {
-            text = "Choose Vehicle Type"
+            text = "Choose Your Vehicle Type"
             textSize = 12f
             setTextColor(Color.parseColor("#FFD166"))
             setPadding(0, 0, 0, 8)
@@ -151,14 +149,14 @@ class MainActivity : Activity() {
                 setOnClickListener {
                     selectedVehicle = v
                     Toast.makeText(this@MainActivity, "Vehicle: $v selected", Toast.LENGTH_SHORT).show()
-                    renderAppHome()
+                    renderExact3DDashboard()
                 }
             }
             vRow.addView(vb)
         }
 
         val inputMob = EditText(this).apply {
-            hint = "Mobile Number"
+            hint = "10-digit Mobile Number"
             setHintTextColor(Color.parseColor("#6C757D"))
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#1B263B"))
@@ -166,7 +164,7 @@ class MainActivity : Activity() {
             inputType = android.text.InputType.TYPE_CLASS_PHONE
         }
 
-        val spaceMob = TextView(this).apply { text = ""; setPadding(0, 8, 0, 0) }
+        val sm = TextView(this).apply { text = ""; setPadding(0, 8, 0, 0) }
 
         val inputPwd = EditText(this).apply {
             hint = "Password (Self Generated)"
@@ -177,17 +175,17 @@ class MainActivity : Activity() {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
 
-        val spacePwd = TextView(this).apply { text = ""; setPadding(0, 12, 0, 0) }
+        val sp = TextView(this).apply { text = ""; setPadding(0, 12, 0, 0) }
 
         val btnRiderSubmit = Button(this).apply {
-            text = "Rider Login & Start Auto-Accept"
+            text = "Login & Start Auto-Accept"
             setBackgroundColor(Color.parseColor("#06D6A0"))
-            setTextColor(Color.WHITE)
+            setTextColor(Color.BLACK)
             setOnClickListener {
                 val m = inputMob.text.toString()
                 val p = inputPwd.text.toString()
                 if (m.isNotEmpty() && p.isNotEmpty()) {
-                    Toast.makeText(this@MainActivity, "Login Success! ($selectedVehicle Mode)", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "Rider Login Success! ($selectedVehicle)", Toast.LENGTH_LONG).show()
                     showRiderWorkspace(m)
                 } else {
                     Toast.makeText(this@MainActivity, "Enter mobile number and password", Toast.LENGTH_SHORT).show()
@@ -195,51 +193,44 @@ class MainActivity : Activity() {
             }
         }
 
-        riderCard.addView(riderTitle)
-        riderCard.addView(riderDesc)
+        riderCard.addView(rTitle)
+        riderCard.addView(rDesc)
         riderCard.addView(vLabel)
         riderCard.addView(vRow)
         riderCard.addView(inputMob)
-        riderCard.addView(spaceMob)
+        riderCard.addView(sm)
         riderCard.addView(inputPwd)
-        riderCard.addView(spacePwd)
+        riderCard.addView(sp)
         riderCard.addView(btnRiderSubmit)
 
-        // Utility Buttons Bar
-        val utilRow = LinearLayout(this).apply {
+        // Bottom Navigation Bar (Home, Analytics, History, Help, About)
+        val bottomNav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            weightSum = 4f
-            setPadding(0, 20, 0, 20)
+            weightSum = 5f
+            setBackgroundColor(Color.parseColor("#0B132B"))
+            setPadding(5, 12, 5, 12)
         }
-        val utils = listOf("📊 Stats", "🕒 History", "🔔 Notify", "⚙️ Settings")
-        for (u in utils) {
-            val ub = Button(this).apply {
-                text = u
-                textSize = 11f
-                setBackgroundColor(Color.parseColor("#212529"))
+        val navItems = listOf("🏠 Home", "📊 Stats", "🕒 History", "❓ Help", "ℹ️ About")
+        for (item in navItems) {
+            val nb = Button(this).apply {
+                text = item
+                textSize = 10f
+                setBackgroundColor(Color.parseColor("#1C2541"))
                 setTextColor(Color.WHITE)
-                layoutParams = LinearLayout.LayoutParams(0, 95, 1f).apply { setMargins(2, 0, 2, 0) }
-                setOnClickListener { Toast.makeText(this@MainActivity, "$u opened", Toast.LENGTH_SHORT).show() }
+                layoutParams = LinearLayout.LayoutParams(0, 90, 1f).apply { setMargins(2, 0, 2, 0) }
+                setOnClickListener { Toast.makeText(this@MainActivity, "$item opened", Toast.LENGTH_SHORT).show() }
             }
-            utilRow.addView(ub)
-        }
-
-        val footer = TextView(this).apply {
-            text = "Ride Smart... Earn More...\nCaptain Smart Pro Ultimate 3D"
-            textSize = 11f
-            setTextColor(Color.parseColor("#FFD166"))
-            gravity = Gravity.CENTER
-            setPadding(0, 10, 0, 10)
+            bottomNav.addView(nb)
         }
 
         mainLayout.addView(header)
-        mainLayout.addView(broadcastCard)
-        mainLayout.addView(space0)
+        mainLayout.addView(banner)
+        mainLayout.addView(s0)
         mainLayout.addView(adminCard)
-        mainLayout.addView(space1)
+        mainLayout.addView(s1)
         mainLayout.addView(riderCard)
-        mainLayout.addView(utilRow)
-        mainLayout.addView(footer)
+        mainLayout.addView(TextView(this).apply { text = ""; setPadding(0, 20, 0, 0) })
+        mainLayout.addView(bottomNav)
 
         rootScroll.addView(mainLayout)
         setContentView(rootScroll)
@@ -259,7 +250,7 @@ class MainActivity : Activity() {
                 val pin = input.text.toString()
                 if (pin == "3479") { // Hidden Master PIN
                     Toast.makeText(this, "Admin Login Successful!", Toast.LENGTH_SHORT).show()
-                    showAdminDashboard()
+                    showSuperAdminDashboard()
                 } else {
                     Toast.makeText(this, "Incorrect PIN! Access Denied.", Toast.LENGTH_SHORT).show()
                 }
@@ -268,7 +259,7 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun showAdminDashboard() {
+    private fun showSuperAdminDashboard() {
         val adminLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(35, 35, 35, 35)
@@ -336,7 +327,7 @@ class MainActivity : Activity() {
             .setPositiveButton("Publish to All Riders") { _, _ ->
                 broadcastMsg = input.text.toString()
                 Toast.makeText(this, "Broadcast published successfully!", Toast.LENGTH_SHORT).show()
-                renderAppHome()
+                renderExact3DDashboard()
             }
             .setNegativeButton("Cancel", null)
             .show()
