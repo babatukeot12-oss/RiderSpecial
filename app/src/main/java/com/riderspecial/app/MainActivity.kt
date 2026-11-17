@@ -17,26 +17,20 @@ class MainActivity : AppCompatActivity() {
         val loginButton = findViewById<Button>(R.id.btnLoginRider)
         val adminLoginButton = findViewById<Button>(R.id.btnLoginAdmin)
 
-        // 0.00s Instant Auto-Accept Engine for Rapido, Ola, Uber, Zomato, Swiggy[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)[span_8](start_span)[span_8](end_span)
+        // 0.00s Instant Auto-Accept Engine for Rapido, Ola, Uber, Zomato, Swiggy[span_1](start_span)[span_1](end_span)[span_2](start_span)[span_2](end_span)[span_3](start_span)[span_3](end_span)
         loginButton.setOnClickListener {
             val mobile = mobileInput.text.toString().trim()
             if (mobile.length == 10) {
-                Toast.makeText(this, "Captain Smart Pro: 0.00s Auto-Accept Active & Device Locked!", Toast.LENGTH_LONG).show()
-                launchRiderWorkspace(mobile)
+                Toast.makeText(applicationContext, "Captain Smart Pro: Auto-Accept Active!", Toast.LENGTH_LONG).show()
             } else {
-                Toast.makeText(this, "कृपया वैध 10-डिजिट मोबाइल नंबर दर्ज करें", Toast.LENGTH_SHORT).show()
+                Toast.makeText(applicationContext, "कृपया सही 10-डिजिट नंबर दर्ज करें", Toast.LENGTH_SHORT).show()
             }
         }
 
-        // Hidden Super Admin Panel (Master PIN: dinakeot1990)[span_9](start_span)[span_9](end_span)
+        // Hidden Super Admin Panel (Master PIN: dinakeot1990)[span_4](start_span)[span_4](end_span)
         adminLoginButton.setOnClickListener {
             showAdminSecurityDialog()
         }
-    }
-
-    private fun launchRiderWorkspace(mobile: String) {
-        // Advanced Filtering: Min fare, max distance, per-km rate & 24-hr trial logic
-        Toast.makeText(this, "Rider Dashboard Initialized for: $mobile", Toast.LENGTH_SHORT).show()
     }
 
     private fun showAdminSecurityDialog() {
@@ -45,30 +39,23 @@ class MainActivity : AppCompatActivity() {
         builder.setMessage("Enter Master PIN to access management room:")
 
         val input = EditText(this)
-        input.hint = "Enter PIN (dinakeot1990)"
+        input.hint = "PIN (dinakeot1990)"
         builder.setView(input)
 
-        builder.setPositiveButton("LOGIN") { _, _ ->
+        builder.setPositiveButton("LOGIN") { dialog, _ ->
             val pin = input.text.toString().trim()
             if (pin == "dinakeot1990") {
-                Toast.makeText(this, "Admin Login Successful! Opening Control Room...", Toast.LENGTH_LONG).show()
-                openAdminControlRoom()
+                Toast.makeText(applicationContext, "Admin Login Successful!", Toast.LENGTH_LONG).show()
             } else {
-                Toast.makeText(this, "Invalid Master PIN!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(applicationContext, "Invalid Master PIN!", Toast.LENGTH_SHORT).show()
             }
+            dialog.dismiss()
         }
+        
         builder.setNegativeButton("CANCEL") { dialog, _ ->
             dialog.cancel()
         }
-        builder.show()
-    }
-
-    private fun openAdminControlRoom() {
-        // Full Admin Suite: UPI QR code management, screenshot subscription approvals & broadcasts[span_10](start_span)[span_10](end_span)
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("SUPER ADMIN CONTROL ROOM")
-        builder.setMessage("Manage Fleet, ₹49 Subscriptions, UPI QR Verification & Broadcasts")
-        builder.setPositiveButton("CLOSE") { dialog, _ -> dialog.dismiss() }
+        
         builder.show()
     }
 }
