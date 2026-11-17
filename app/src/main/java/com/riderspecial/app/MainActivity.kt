@@ -1,7 +1,6 @@
 package com.riderspecial.app
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 
@@ -10,16 +9,14 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Captain Smart Pro - Direct UI Handler
-        Toast.makeText(this, "Captain Smart Pro: 0.00s Auto-Accept Active!", Toast.LENGTH_LONG).show()
-        
+        // Captain Smart Pro - Master Panel Launcher
         showAdminSecurityDialog()
     }
 
     private fun showAdminSecurityDialog() {
         val builder = AlertDialog.Builder(this)
-        builder.setTitle("Admin Security Check")
-        builder.setMessage("Enter Master PIN (dinakeot1990) to access management room:")
+        builder.setTitle("Captain Smart Pro")
+        builder.setMessage("Enter Master PIN (dinakeot1990) to access Admin Control Room:")
 
         val input = android.widget.EditText(this)
         input.hint = "Enter PIN"
@@ -28,9 +25,17 @@ class MainActivity : AppCompatActivity() {
         builder.setPositiveButton("LOGIN") { dialog, _ ->
             val pin = input.text.toString().trim()
             if (pin == "dinakeot1990") {
-                Toast.makeText(this, "Admin Login Successful!", Toast.LENGTH_LONG).show()
+                val alert = AlertDialog.Builder(this)
+                alert.setTitle("Success")
+                alert.setMessage("Admin Login Successful!")
+                alert.setPositiveButton("OK") { d, _ -> d.dismiss() }
+                alert.show()
             } else {
-                Toast.makeText(this, "Invalid Master PIN!", Toast.LENGTH_SHORT).show()
+                val alert = AlertDialog.Builder(this)
+                alert.setTitle("Error")
+                alert.setMessage("Invalid Master PIN!")
+                alert.setPositiveButton("OK") { d, _ -> d.dismiss() }
+                alert.show()
             }
             dialog.dismiss()
         }
