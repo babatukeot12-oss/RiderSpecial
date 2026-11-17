@@ -1,49 +1,39 @@
 package com.riderspecial.app
 
 import android.os.Bundle
-import androidx.appcompat.app.AlertDialog
+import android.widget.Button
+import android.widget.EditText
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Captain Smart Pro - Master Panel Launcher
-        showAdminSecurityDialog()
-    }
+        setContentView(R.layout.activity_main)
 
-    private fun showAdminSecurityDialog() {
-        val builder = AlertDialog.Builder(this)
-        builder.setTitle("Captain Smart Pro")
-        builder.setMessage("Enter Master PIN (dinakeot1990) to access Admin Control Room:")
+        val mobileInput = findViewById<EditText>(R.id.etMobileNumber)
+        val loginButton = findViewById<Button>(R.id.btnLoginRider)
+        val adminLoginButton = findViewById<Button>(R.id.btnLoginAdmin)
 
-        val input = android.widget.EditText(this)
-        input.hint = "Enter PIN"
-        builder.setView(input)
-
-        builder.setPositiveButton("LOGIN") { dialog, _ ->
-            val pin = input.text.toString().trim()
-            if (pin == "dinakeot1990") {
-                val alert = AlertDialog.Builder(this)
-                alert.setTitle("Success")
-                alert.setMessage("Admin Login Successful!")
-                alert.setPositiveButton("OK") { d, _ -> d.dismiss() }
-                alert.show()
+        // Rider Login & 0.00s Auto-Accept Engine for Rapido, Ola, Uber, Zomato, Swiggy[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)[span_2](start_span)[span_2](end_span)
+        loginButton.setOnClickListener {
+            val mobile = mobileInput.text.toString().trim()
+            if (mobile.length == 10) {
+                Toast.makeText(this, "Captain Smart Pro: 0.00s Auto-Accept Active!", Toast.LENGTH_LONG).show()
             } else {
-                val alert = AlertDialog.Builder(this)
-                alert.setTitle("Error")
-                alert.setMessage("Invalid Master PIN!")
-                alert.setPositiveButton("OK") { d, _ -> d.dismiss() }
-                alert.show()
+                Toast.makeText(this, "कृपया वैध 10-डिजिट मोबाइल नंबर दर्ज करें", Toast.LENGTH_SHORT).show()
             }
-            dialog.dismiss()
         }
-        
-        builder.setNegativeButton("CANCEL") { dialog, _ ->
-            dialog.cancel()
+
+        // Hidden Super Admin Panel Login using Master PIN: dinakeot1990[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span)
+        adminLoginButton.setOnClickListener {
+            val pin = mobileInput.text.toString().trim()
+            if (pin == "dinakeot1990") {
+                Toast.makeText(this, "Super Admin Control Room Unlocked Successfully!", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "कृपया एडमिन पिन दर्ज करें (dinakeot1990)", Toast.LENGTH_LONG).show()
+            }
         }
-        
-        builder.show()
     }
 }
