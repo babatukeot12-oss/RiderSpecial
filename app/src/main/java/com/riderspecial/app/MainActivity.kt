@@ -28,7 +28,7 @@ class MainActivity : Activity() {
     private fun renderAppHome() {
         val rootScroll = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#060A17"))
-            fillViewport = true
+            isFillViewport = true
         }
 
         val mainLayout = LinearLayout(this).apply {
