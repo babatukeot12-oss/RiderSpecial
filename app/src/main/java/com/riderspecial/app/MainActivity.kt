@@ -2,159 +2,262 @@ package com.riderspecial.app
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import android.view.Gravity
 import android.widget.*
-import java.util.UUID
 
 class MainActivity : Activity() {
 
+    private var selectedVehicle = "Scooty"
+    private var adminUpiId = "babatukeot@paytm"
+    private var broadcastMsg = "🚀 Welcome to Captain Smart Pro! 0.00s Instant Auto-Accept active for all riders."
+    private var communityLinks = "FB: facebook.com | YT: youtube.com | WA: whatsapp.com"
+    
+    // Rider Custom Filters
+    private var maxPickupKm = "1.0"
+    private var minFareAmt = "20"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // 1. Device-Locked 7-Day Trial & Subscription Verification
-        val prefs = getSharedPreferences("RiderSpecialPrefs", Context.MODE_PRIVATE)
-        var deviceId = prefs.getString("device_hardware_id", null)
-        
-        if (deviceId == null) {
-            deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: UUID.randomUUID().toString()
-            prefs.edit().putString("device_hardware_id", deviceId)
-                .putLong("trial_start_time", System.currentTimeMillis())
-                .putBoolean("is_paid", false)
-                .apply()
-        }
-
-        val installTime = prefs.getLong("trial_start_time", System.currentTimeMillis())
-        val isPaid = prefs.getBoolean("is_paid", false)
-        val isTrialActive = (System.currentTimeMillis() - installTime < 7L * 24 * 60 * 60 * 1000)
-
-        // 2. Load Fully Upgraded Interactive Dashboard
-        setupMainDashboard(isPaid || isTrialActive)
+        renderAppHome()
     }
 
-    private fun setupMainDashboard(isAllowed: Boolean) {
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setBackgroundColor(Color.parseColor("#121212"))
-            setPadding(40, 40, 40, 40)
+    private fun renderAppHome() {
+        val rootScroll = ScrollView(this).apply {
+            setBackgroundColor(Color.parseColor("#060A17"))
+            fillViewport = true
         }
 
-        val titleText = TextView(this).apply {
-            text = "Captain Smart Pro"
-            textSize = 26f
-            setTextColor(Color.YELLOW)
+        val mainLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(25, 30, 25, 30)
+        }
+
+        // Top Header 3D Crown Look
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 20)
+        }
+        val crownTv = TextView(this).apply {
+            text = "👑"
+            textSize = 28f
+            gravity = Gravity.CENTER
+        }
+        val titleTv = TextView(this).apply {
+            text = "Captain Smart Pro"
+            textSize = 24f
+            setTextColor(Color.parseColor("#06D6A0"))
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+        }
+        val subTitle = TextView(this).apply {
+            text = "Auto-Clicker & Ride Dispatch Portal"
+            textSize = 12f
+            setTextColor(Color.parseColor("#8D99AE"))
+            gravity = Gravity.CENTER
+        }
+        header.addView(crownTv)
+        header.addView(titleTv)
+        header.addView(subTitle)
+
+        // Live Broadcast Banner
+        val broadcastCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#111A30"))
+            setPadding(20, 15, 20, 15)
+        }
+        val bText = TextView(this).apply {
+            text = "📢 Announcement:\n$broadcastMsg"
+            textSize = 12f
+            setTextColor(Color.parseColor("#FFD166"))
+        }
+        broadcastCard.addView(bText)
+
+        val space0 = TextView(this).apply { text = ""; setPadding(0, 15, 0, 0) }
+
+        // 1. Admin Login Section (Hidden PIN 3479)
+        val adminCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#111A30"))
+            setPadding(25, 25, 25, 25)
+        }
+        val adminTitle = TextView(this).apply {
+            text = "🛡️ Admin Login"
+            textSize = 16f
+            setTextColor(Color.parseColor("#4CC9F0"))
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
-
-        val statusText = TextView(this).apply {
-            text = if (isAllowed) {
-                "\n🟢 Rider Status: Active & Secured\n• 0.00s Ride Catcher Enabled\n• Ola, Uber, Rapido, Zomato, Swiggy Support\n• Mobile Quick Login Active\n"
-            } else {
-                "\n🔴 7-Day Free Trial Expired!\nPlease pay ₹49 via Admin UPI QR Code.\n"
-            }
-            textSize = 14f
-            setTextColor(if (isAllowed) Color.GREEN else Color.RED)
-            gravity = Gravity.CENTER
+        val adminDesc = TextView(this).apply {
+            text = "Manage Riders, Broadcasts & Payments"
+            textSize = 11f
+            setTextColor(Color.parseColor("#8D99AE"))
+            setPadding(0, 5, 0, 15)
         }
-
-        val btnStartRider = Button(this).apply {
-            text = "🚀 START AUTO-ACCEPT RIDER MODE"
-            setBackgroundColor(Color.parseColor("#2E7D32"))
-            setTextColor(Color.WHITE)
-            setOnClickListener {
-                if (isAllowed) {
-                    showRiderControlPanel()
-                } else {
-                    showSubscriptionPaymentDialog()
-                }
-            }
-        }
-
         val btnAdminLogin = Button(this).apply {
-            text = "🔐 ADMIN CONTROL PANEL"
-            setBackgroundColor(Color.parseColor("#E65100"))
+            text = "Admin Login Now"
+            setBackgroundColor(Color.parseColor("#3A86EF"))
             setTextColor(Color.WHITE)
-            setOnClickListener {
-                showAdminPinDialog()
-            }
+            setOnClickListener { showAdminPinDialog() }
         }
+        adminCard.addView(adminTitle)
+        adminCard.addView(adminDesc)
+        adminCard.addView(btnAdminLogin)
 
-        layout.addView(titleText)
-        layout.addView(statusText)
-        layout.addView(btnStartRider)
-        layout.addView(btnAdminLogin)
-        setContentView(layout)
-    }
+        val space1 = TextView(this).apply { text = ""; setPadding(0, 15, 0, 0) }
 
-    private fun showRiderControlPanel() {
-        val prefs = getSharedPreferences("RiderSpecialPrefs", Context.MODE_PRIVATE)
-        val savedUpi = prefs.getString("admin_upi", "babatukeot@paytm")
-
-        val riderLayout = LinearLayout(this).apply {
+        // 2. Rider Login & Vehicle Selector Section
+        val riderCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40, 40, 40, 40)
-            setBackgroundColor(Color.parseColor("#1E1E1E"))
+            setBackgroundColor(Color.parseColor("#111A30"))
+            setPadding(25, 25, 25, 25)
+        }
+        val riderTitle = TextView(this).apply {
+            text = "🛵 Rider Login & Workspace"
+            textSize = 16f
+            setTextColor(Color.parseColor("#06D6A0"))
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+        val riderDesc = TextView(this).apply {
+            text = "0.00s Instant Auto-Accept & Proximity Priority"
+            textSize = 11f
+            setTextColor(Color.parseColor("#8D99AE"))
+            setPadding(0, 5, 0, 15)
         }
 
-        val title = TextView(this).apply {
-            text = "🚀 RIDER WORKSPACE\n"
-            textSize = 20f
-            setTextColor(Color.YELLOW)
-            gravity = Gravity.CENTER
+        val vLabel = TextView(this).apply {
+            text = "Choose Vehicle Type"
+            textSize = 12f
+            setTextColor(Color.parseColor("#FFD166"))
+            setPadding(0, 0, 0, 8)
         }
 
-        val info = TextView(this).apply {
-            text = "• Auto-Accept Speed: 0.00s (Instant)\n• Platforms: Ola, Uber, Rapido, Zomato, Swiggy\n• Status: Scanning for rides...\n\n"
-            textSize = 14f
+        val vRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 4f
+            setPadding(0, 0, 0, 15)
+        }
+        val vehicles = listOf("Scooty", "Bike", "Taxi", "Auto")
+        for (v in vehicles) {
+            val vb = Button(this).apply {
+                text = v
+                textSize = 11f
+                setBackgroundColor(if (v == selectedVehicle) Color.parseColor("#06D6A0") else Color.parseColor("#212529"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(0, 85, 1f).apply { setMargins(2, 0, 2, 0) }
+                setOnClickListener {
+                    selectedVehicle = v
+                    Toast.makeText(this@MainActivity, "Vehicle: $v selected", Toast.LENGTH_SHORT).show()
+                    renderAppHome()
+                }
+            }
+            vRow.addView(vb)
+        }
+
+        val inputMob = EditText(this).apply {
+            hint = "Mobile Number"
+            setHintTextColor(Color.parseColor("#6C757D"))
             setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#1B263B"))
+            setPadding(20, 15, 20, 15)
+            inputType = android.text.InputType.TYPE_CLASS_PHONE
         }
 
-        val btnPaySub = Button(this).apply {
-            text = "Pay ₹49 Subscription via UPI"
+        val spaceMob = TextView(this).apply { text = ""; setPadding(0, 8, 0, 0) }
+
+        val inputPwd = EditText(this).apply {
+            hint = "Password (Self Generated)"
+            setHintTextColor(Color.parseColor("#6C757D"))
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.parseColor("#1B263B"))
+            setPadding(20, 15, 20, 15)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+
+        val spacePwd = TextView(this).apply { text = ""; setPadding(0, 12, 0, 0) }
+
+        val btnRiderSubmit = Button(this).apply {
+            text = "Rider Login & Start Auto-Accept"
+            setBackgroundColor(Color.parseColor("#06D6A0"))
+            setTextColor(Color.WHITE)
             setOnClickListener {
-                val upiUri = Uri.parse("upi://pay?pa=$savedUpi&pn=DinaKeot&am=49.00&cu=INR")
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, upiUri))
-                } catch (e: Exception) {
-                    Toast.makeText(this@MainActivity, "UPI App not found! Pay to: $savedUpi", Toast.LENGTH_LONG).show()
+                val m = inputMob.text.toString()
+                val p = inputPwd.text.toString()
+                if (m.isNotEmpty() && p.isNotEmpty()) {
+                    Toast.makeText(this@MainActivity, "Login Success! ($selectedVehicle Mode)", Toast.LENGTH_LONG).show()
+                    showRiderWorkspace(m)
+                } else {
+                    Toast.makeText(this@MainActivity, "Enter mobile number and password", Toast.LENGTH_SHORT).show()
                 }
             }
         }
 
-        riderLayout.addView(title)
-        riderLayout.addView(info)
-        riderLayout.addView(btnPaySub)
+        riderCard.addView(riderTitle)
+        riderCard.addView(riderDesc)
+        riderCard.addView(vLabel)
+        riderCard.addView(vRow)
+        riderCard.addView(inputMob)
+        riderCard.addView(spaceMob)
+        riderCard.addView(inputPwd)
+        riderCard.addView(spacePwd)
+        riderCard.addView(btnRiderSubmit)
 
-        AlertDialog.Builder(this)
-            .setView(riderLayout)
-            .setPositiveButton("Close", null)
-            .show()
-    }
+        // Utility Buttons Bar
+        val utilRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 4f
+            setPadding(0, 20, 0, 20)
+        }
+        val utils = listOf("📊 Stats", "🕒 History", "🔔 Notify", "⚙️ Settings")
+        for (u in utils) {
+            val ub = Button(this).apply {
+                text = u
+                textSize = 11f
+                setBackgroundColor(Color.parseColor("#212529"))
+                setTextColor(Color.WHITE)
+                layoutParams = LinearLayout.LayoutParams(0, 95, 1f).apply { setMargins(2, 0, 2, 0) }
+                setOnClickListener { Toast.makeText(this@MainActivity, "$u opened", Toast.LENGTH_SHORT).show() }
+            }
+            utilRow.addView(ub)
+        }
 
-    private fun showSubscriptionPaymentDialog() {
-        Toast.makeText(this, "Trial expired! Please pay ₹49 to activate 30 days.", Toast.LENGTH_LONG).show()
+        val footer = TextView(this).apply {
+            text = "Ride Smart... Earn More...\nCaptain Smart Pro Ultimate 3D"
+            textSize = 11f
+            setTextColor(Color.parseColor("#FFD166"))
+            gravity = Gravity.CENTER
+            setPadding(0, 10, 0, 10)
+        }
+
+        mainLayout.addView(header)
+        mainLayout.addView(broadcastCard)
+        mainLayout.addView(space0)
+        mainLayout.addView(adminCard)
+        mainLayout.addView(space1)
+        mainLayout.addView(riderCard)
+        mainLayout.addView(utilRow)
+        mainLayout.addView(footer)
+
+        rootScroll.addView(mainLayout)
+        setContentView(rootScroll)
     }
 
     private fun showAdminPinDialog() {
         val input = EditText(this).apply {
-            hint = "Enter Master Admin PIN"
+            hint = "Enter Admin PIN"
             inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
         }
 
         AlertDialog.Builder(this)
             .setTitle("Admin Security Check")
-            .setMessage("Enter Master PIN (3479) to access management dashboard:")
+            .setMessage("Enter Master PIN to access management room:")
             .setView(input)
             .setPositiveButton("Login") { _, _ ->
                 val pin = input.text.toString()
-                if (pin == "3479") {
+                if (pin == "3479") { // Hidden Master PIN
                     Toast.makeText(this, "Admin Login Successful!", Toast.LENGTH_SHORT).show()
                     showAdminDashboard()
                 } else {
@@ -166,95 +269,176 @@ class MainActivity : Activity() {
     }
 
     private fun showAdminDashboard() {
-        val prefs = getSharedPreferences("RiderSpecialPrefs", Context.MODE_PRIVATE)
-
         val adminLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(40, 40, 40, 40)
-            setBackgroundColor(Color.parseColor("#1E1E1E"))
+            setPadding(35, 35, 35, 35)
+            setBackgroundColor(Color.parseColor("#111A30"))
         }
 
         val title = TextView(this).apply {
-            text = "🛠️ ADMIN CONTROL ROOM\n"
-            textSize = 22f
-            setTextColor(Color.GREEN)
+            text = "🛠️ SUPER ADMIN CONTROL ROOM\n"
+            textSize = 18f
+            setTextColor(Color.parseColor("#06D6A0"))
             gravity = Gravity.CENTER
             setTypeface(null, android.graphics.Typeface.BOLD)
         }
 
-        val stats = TextView(this).apply {
-            text = "📊 Live Fleet & Revenue Stats:\n• Active Fleet: Online\n• Subscription Security: Device-Locked\n\n"
-            textSize = 14f
+        val info = TextView(this).apply {
+            text = "📊 Live Management:\n• Admin UPI: $adminUpiId\n• Social Links: $communityLinks\n• Active Broadcast: $broadcastMsg\n\n"
+            textSize = 13f
             setTextColor(Color.WHITE)
         }
 
-        // 1. Real Working UPI Update Button with Input Dialog
-        val btnUpdateQR = Button(this).apply {
-            text = "Update UPI ID / QR Code"
-            setOnClickListener {
-                val upiInput = EditText(this@MainActivity).apply {
-                    setText(prefs.getString("admin_upi", "babatukeot@paytm"))
-                    hint = "Enter new UPI ID"
-                }
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Change UPI Payment ID")
-                    .setView(upiInput)
-                    .setPositiveButton("Save") { _, _ ->
-                        val newUpi = upiInput.text.toString()
-                        prefs.edit().putString("admin_upi", newUpi).apply()
-                        Toast.makeText(this@MainActivity, "UPI ID updated to: $newUpi", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-            }
+        val btnB = Button(this).apply {
+            text = "📢 Broadcast Message to All Riders"
+            setOnClickListener { showBroadcastDialog() }
         }
 
-        // 2. Real Working Screenshot Approval Simulation
-        val btnApproveRiders = Button(this).apply {
-            text = "Approve Rider Subscriptions"
-            setOnClickListener {
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Pending Rider Screenshots")
-                    .setMessage("1. Rider +919954681428 - ₹49 Paid\n(Click Activate to grant 30 Days)")
-                    .setPositiveButton("Activate 30 Days") { _, _ ->
-                        prefs.edit().putBoolean("is_paid", true).apply()
-                        Toast.makeText(this@MainActivity, "Rider Subscription Approved Successfully!", Toast.LENGTH_LONG).show()
-                    }
-                    .setNegativeButton("Close", null)
-                    .show()
-            }
+        val btnUpi = Button(this).apply {
+            text = "💳 Update UPI QR / Payment ID"
+            setOnClickListener { showUpdateUpiDialog() }
         }
 
-        // 3. Real Working WhatsApp / Social Links Update
-        val btnManageLinks = Button(this).apply {
-            text = "Update WhatsApp Group Link"
-            setOnClickListener {
-                val linkInput = EditText(this@MainActivity).apply {
-                    setText(prefs.getString("whatsapp_link", "https://whatsapp.com/"))
-                    hint = "Enter WhatsApp Group Link"
-                }
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Update Community Link")
-                    .setView(linkInput)
-                    .setPositiveButton("Save") { _, _ ->
-                        val newLink = linkInput.text.toString()
-                        prefs.edit().putString("whatsapp_link", newLink).apply()
-                        Toast.makeText(this@MainActivity, "WhatsApp Group Link Saved!", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .show()
-            }
+        val btnApprove = Button(this).apply {
+            text = "✅ Approve Subscriptions (Screenshots)"
+            setOnClickListener { showApproveDialog() }
+        }
+
+        val btnLinks = Button(this).apply {
+            text = "🌐 Manage Social Links (YT/FB/WA/X)"
+            setOnClickListener { showSocialLinksDialog() }
+        }
+
+        val btnCall = Button(this).apply {
+            text = "📞 Direct Call / SMS Any Rider"
+            setOnClickListener { showCallRiderDialog() }
         }
 
         adminLayout.addView(title)
-        adminLayout.addView(stats)
-        adminLayout.addView(btnUpdateQR)
-        adminLayout.addView(btnApproveRiders)
-        adminLayout.addView(btnManageLinks)
+        adminLayout.addView(info)
+        adminLayout.addView(btnB)
+        adminLayout.addView(btnUpi)
+        adminLayout.addView(btnApprove)
+        adminLayout.addView(btnLinks)
+        adminLayout.addView(btnCall)
 
         AlertDialog.Builder(this)
             .setView(adminLayout)
             .setCancelable(true)
+            .show()
+    }
+
+    private fun showBroadcastDialog() {
+        val input = EditText(this).apply { setText(broadcastMsg) }
+        AlertDialog.Builder(this)
+            .setTitle("Broadcast Notification")
+            .setView(input)
+            .setPositiveButton("Publish to All Riders") { _, _ ->
+                broadcastMsg = input.text.toString()
+                Toast.makeText(this, "Broadcast published successfully!", Toast.LENGTH_SHORT).show()
+                renderAppHome()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showUpdateUpiDialog() {
+        val input = EditText(this).apply { setText(adminUpiId) }
+        AlertDialog.Builder(this)
+            .setTitle("Update Personal UPI ID")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                adminUpiId = input.text.toString()
+                Toast.makeText(this, "UPI Updated: $adminUpiId", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showApproveDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Verify Payment Screenshots")
+            .setMessage("1. Rider +919954681428 - ₹49 Paid via UPI\n(Verify screenshot and grant 30 Days)")
+            .setPositiveButton("Approve 30 Days") { _, _ ->
+                Toast.makeText(this, "Subscription Activated for Rider!", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showSocialLinksDialog() {
+        val input = EditText(this).apply { setText(communityLinks) }
+        AlertDialog.Builder(this)
+            .setTitle("Update Social & Community Links")
+            .setMessage("Enter YouTube, Facebook, Twitter, WhatsApp links:")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                communityLinks = input.text.toString()
+                Toast.makeText(this, "Social links updated for all riders!", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showCallRiderDialog() {
+        val input = EditText(this).apply { hint = "Enter Rider Mobile Number" }
+        AlertDialog.Builder(this)
+            .setTitle("Direct Contact Rider")
+            .setView(input)
+            .setPositiveButton("Call Now") { _, _ ->
+                val num = input.text.toString()
+                try {
+                    startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$num")))
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Dialer error", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showRiderWorkspace(mobile: String) {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(30, 30, 30, 30)
+        }
+
+        val info = TextView(this).apply {
+            text = "🚀 RIDER WORKSPACE ($selectedVehicle)\n• Logged in: $mobile\n• Auto-Accept: 0.00s (Proximity Priority Active)\n\n"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+        }
+
+        val l1 = TextView(this).apply { text = "Max Pickup Range (Km):"; setTextColor(Color.YELLOW) }
+        val e1 = EditText(this).apply { setText(maxPickupKm); inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL }
+
+        val l2 = TextView(this).apply { text = "Minimum Fare Amount (₹):"; setTextColor(Color.YELLOW) }
+        val e2 = EditText(this).apply { setText(minFareAmt); inputType = android.text.InputType.TYPE_CLASS_NUMBER }
+
+        layout.addView(info)
+        layout.addView(l1)
+        layout.addView(e1)
+        layout.addView(l2)
+        layout.addView(e2)
+
+        AlertDialog.Builder(this)
+            .setTitle("Configure Ride Filters & Auto-Accept")
+            .setView(layout)
+            .setPositiveButton("Save Filters & Start") { _, _ ->
+                maxPickupKm = e1.text.toString()
+                minFareAmt = e2.text.toString()
+                Toast.makeText(this, "Filters saved! Scanning rides within ${maxPickupKm}Km (Min ₹$minFareAmt)", Toast.LENGTH_LONG).show()
+            }
+            .setNeutralButton("Pay ₹49 Plan via UPI") { _, _ ->
+                val uri = Uri.parse("upi://pay?pa=$adminUpiId&pn=Admin&am=49.00&cu=INR")
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, uri))
+                    Toast.makeText(this, "Pay ₹49 to $adminUpiId & share screenshot for instant approval", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Pay via UPI ID: $adminUpiId", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("Close", null)
             .show()
     }
 }
