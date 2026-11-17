@@ -1,6 +1,5 @@
 package com.riderspecial.app
 
-import android.content.Intent
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
@@ -18,7 +17,7 @@ class MainActivity : AppCompatActivity() {
         val loginButton = findViewById<Button>(R.id.btnLoginRider)
         val adminLoginButton = findViewById<Button>(R.id.btnLoginAdmin)
 
-        // 0.00s Instant Auto-Accept Engine for Rapido, Ola, Uber, Zomato, Swiggy[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span)[span_5](start_span)[span_5](end_span)
+        // 0.00s Instant Auto-Accept Engine for Rapido, Ola, Uber, Zomato, Swiggy[span_6](start_span)[span_6](end_span)[span_7](start_span)[span_7](end_span)[span_8](start_span)[span_8](end_span)
         loginButton.setOnClickListener {
             val mobile = mobileInput.text.toString().trim()
             if (mobile.length == 10) {
@@ -29,7 +28,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Hidden Super Admin Panel (Master PIN: dinakeot1990)[span_6](start_span)[span_6](end_span)
+        // Hidden Super Admin Panel (Master PIN: dinakeot1990)[span_9](start_span)[span_9](end_span)
         adminLoginButton.setOnClickListener {
             showAdminSecurityDialog()
         }
@@ -65,7 +64,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openAdminControlRoom() {
-        // Full Admin Suite: UPI QR code management, screenshot subscription approvals & broadcasts[span_7](start_span)[span_7](end_span)
+        // Full Admin Suite: UPI QR code management, screenshot subscription approvals & broadcasts[span_10](start_span)[span_10](end_span)
         val builder = AlertDialog.Builder(this)
         builder.setTitle("SUPER ADMIN CONTROL ROOM")
         builder.setMessage("Manage Fleet, ₹49 Subscriptions, UPI QR Verification & Broadcasts")
