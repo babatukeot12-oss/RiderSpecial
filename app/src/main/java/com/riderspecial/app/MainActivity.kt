@@ -180,10 +180,10 @@ class MainActivity : Activity() {
         }
 
         val rangeLabel = TextView(this).apply { text = "Max Pickup (Km)"; textSize = 11f; setTextColor(Color.parseColor("#8D99AE")) }
-        val inputRange = EditText(this).apply { setText("1.0"); setTextColor(Color.WHITE); setBackgroundcolor(Color.parseColor("#1B263B")); setPadding(12, 10, 12, 10) }
+        val inputRange = EditText(this).apply { setText("1.0"); setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#1B263B")); setPadding(12, 10, 12, 10) }
 
         val priceLabel = TextView(this).apply { text = "Min Price (₹)"; textSize = 11f; setTextColor(Color.parseColor("#8D99AE")); setPadding(0, 10, 0, 0) }
-        val inputPrice = EditText(this).apply { setText("20"); setTextColor(Color.WHITE); setBackgroundcolor(Color.parseColor("#1B263B")); setPadding(12, 10, 12, 10) }
+        val inputPrice = EditText(this).apply { setText("20"); setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#1B263B")); setPadding(12, 10, 12, 10) }
 
         filterCard.addView(fTitle)
         filterCard.addView(rangeLabel)
@@ -208,9 +208,9 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             weightSum = 3f
         }
-        val e1 = TextView(this).apply { text = "Total Earnings\n₹0"; textSize = 11f; setTextColor(Color.WHITE); setBackgroundcolor(Color.parseColor("#113F29")); setPadding(10, 10, 10, 10); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = 4 } }
-        val e2 = TextView(this).apply { text = "Total Rides\n0"; textSize = 11f; setTextColor(Color.WHITE); setBackgroundcolor(Color.parseColor("#1C2541")); setPadding(10, 10, 10, 10); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = 2; leftMargin = 2 } }
-        val e3 = TextView(this).apply { text = "Total Distance\n0.0 Km"; textSize = 11f; setTextColor(Color.WHITE); setBackgroundcolor(Color.parseColor("#3C096C")); setPadding(10, 10, 10, 10); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = 4 } }
+        val e1 = TextView(this).apply { text = "Total Earnings\n₹0"; textSize = 11f; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#113F29")); setPadding(10, 10, 10, 10); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = 4 } }
+        val e2 = TextView(this).apply { text = "Total Rides\n0"; textSize = 11f; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#1C2541")); setPadding(10, 10, 10, 10); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = 2; leftMargin = 2 } }
+        val e3 = TextView(this).apply { text = "Total Distance\n0.0 Km"; textSize = 11f; setTextColor(Color.WHITE); setBackgroundColor(Color.parseColor("#3C096C")); setPadding(10, 10, 10, 10); layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply { leftMargin = 4 } }
         
         earnRow.addView(e1)
         earnRow.addView(e2)
