@@ -153,7 +153,8 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#1B263B"))
             setPadding(15, 15, 15, 15)
-            textSize, text = 13f, ""
+            textSize = 13f
+            setText("")
         }
         val s3 = TextView(this).apply { text = ""; setPadding(0, 8, 0, 0) }
 
