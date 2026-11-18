@@ -4,11 +4,18 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.Gravity
 import android.widget.*
 
 class MainActivity : Activity() {
+
+    companion object {
+        private const val PICK_IMAGES_REQUEST = 101
+        private const val PICK_VIDEO_REQUEST = 102
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,7 +61,7 @@ class MainActivity : Activity() {
         header.addView(titleTv)
         header.addView(subTitle)
 
-        // Ad Banner Notice (Server Cost Management)
+        // Ad Banner Notice
         val adNotice = TextView(this).apply {
             text = "📢 Free Access Powered by Smart Ads (Server Cost)"
             textSize = 10f
@@ -110,7 +117,7 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.parseColor("#1B263B"))
             setTextColor(Color.WHITE)
             setPadding(10, 15, 10, 15)
-            setOnClickListener { showFeatureDialog("Video Face Swap", "Upload any video (1 to 4+ people) and swap faces instantly with original quality.") }
+            setOnClickListener { showFeatureDialog("Video Face Swap", "Upload any video to swap faces.", PICK_VIDEO_REQUEST) }
         }
 
         val s1 = TextView(this).apply { text = ""; setPadding(0, 8, 0, 0) }
@@ -121,7 +128,7 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.parseColor("#1B263B"))
             setTextColor(Color.WHITE)
             setPadding(10, 15, 10, 15)
-            setOnClickListener { showFeatureDialog("Voice & Lip-Sync Dubbing", "Convert English video speech into natural Hindi audio with perfect lip-syncing.") }
+            setOnClickListener { showFeatureDialog("Voice & Lip-Sync Dubbing", "Upload English video for Hindi dubbing.", PICK_VIDEO_REQUEST) }
         }
 
         advCard.addView(advTitle)
@@ -160,7 +167,7 @@ class MainActivity : Activity() {
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(15, 20, 15, 20)
             setOnClickListener {
-                Toast.makeText(this@MainActivity, "Ad playing to cover server cost... Generating AI result!", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, "Ad playing for server cost... Generating AI result!", Toast.LENGTH_LONG).show()
             }
         }
 
@@ -185,8 +192,8 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("📷 Photo Studio (1 to 5 Images)")
             .setMessage("Upload up to 4-5 original photos or leave blank. Enter your Hindi prompt to generate real-life AI photos.")
-            .setPositiveButton("Open Uploader", null)
-            .setNegativeButton("Close", null)
+            .setPositiveButton("OPEN UPLOADER") { _, _ -> openGallery("image/*", PICK_IMAGES_REQUEST) }
+            .setNegativeButton("CLOSE", null)
             .show()
     }
 
@@ -194,17 +201,40 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("🎥 Long Video Studio")
             .setMessage("Stitch 4-5 photos or create from text prompt. Generates long, original 4K videos with Hindi voiceover.")
-            .setPositiveButton("Open Creator", null)
-            .setNegativeButton("Close", null)
+            .setPositiveButton("OPEN CREATOR") { _, _ -> openGallery("image/*", PICK_IMAGES_REQUEST) }
+            .setNegativeButton("CLOSE", null)
             .show()
     }
 
-    private fun showFeatureDialog(title: String, desc: String) {
+    private fun showFeatureDialog(title: String, desc: String, requestCode: Int) {
         AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage("$desc\n\n(Supported by rewarded ad to keep service free).")
-            .setPositiveButton("Start Now", null)
-            .setNegativeButton("Cancel", null)
+            .setPositiveButton("START NOW") { _, _ -> openGallery("video/*", requestCode) }
+            .setNegativeButton("CANCEL", null)
             .show()
+    }
+
+    private fun openGallery(type: String, requestCode: Int) {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI).apply {
+            setDataAndType(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, type)
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        try {
+            startActivityForResult(Intent.createChooser(intent, "Select Media"), requestCode)
+        } catch (e: Exception) {
+            val fallbackIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                this.type = type
+                putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            }
+            startActivityForResult(Intent.createChooser(fallbackIntent, "Select Media"), requestCode)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode == RESULT_OK) {
+            Toast.makeText(this, "Media successfully selected! Processing AI command...", Toast.LENGTH_LONG).show()
+        }
     }
 }
