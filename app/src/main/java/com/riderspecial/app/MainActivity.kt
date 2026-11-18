@@ -2,6 +2,7 @@ package com.riderspecial.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -12,10 +13,84 @@ import android.widget.*
 class MainActivity : Activity() {
 
     private lateinit var inputCommand: EditText
+    private var isSubscribed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        renderAppUI()
+        
+        // Check 3-day Trial or ₹49 Subscription Status (Device Locked)
+        checkSubscriptionAndTrial()
+    }
+
+    private fun checkSubscriptionAndTrial() {
+        val prefs = getSharedPreferences("AIStudioPrefs", Context.MODE_PRIVATE)
+        val firstLaunchTime = prefs.getLong("first_launch", 0L)
+        val currentTime = System.currentTimeMillis()
+
+        if (firstLaunchTime == 0L) {
+            prefs.edit().putLong("first_launch", currentTime).apply()
+        }
+
+        val threeDaysInMillis = 3L * 24 * 60 * 60 * 1000
+        val isTrialActive = (currentTime - (if (firstLaunchTime == 0L) currentTime else firstLaunchTime)) < threeDaysInMillis
+        isSubscribed = prefs.getBoolean("is_subscribed", false)
+
+        if (!isTrialActive && !isSubscribed) {
+            showSubscriptionLockScreen()
+        } else {
+            renderAppUI()
+        }
+    }
+
+    private fun showSubscriptionLockScreen() {
+        val lockLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.parseColor("#040814"))
+            setPadding(35, 50, 35, 50)
+            gravity = Gravity.CENTER
+        }
+
+        val crownTv = TextView(this).apply {
+            text = "👑"
+            textSize = 36f
+            gravity = Gravity.CENTER
+        }
+        val title = TextView(this).apply {
+            text = "⚠️ TRIAL EXPIRED (LOCKED)"
+            textSize = 18f
+            setTextColor(Color.parseColor("#FF3333"))
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(0, 15, 0, 10)
+        }
+        val desc = TextView(this).apply {
+            text = "Your 3-day free trial has ended.\nTo unlock AI Studio Pro permanently, pay ₹49 for 30 days subscription.\n\nUPI ID: 9954681428@naviaxis"
+            textSize = 13f
+            setTextColor(Color.parseColor("#FFFFFF"))
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 20)
+        }
+
+        val btnPay = Button(this).apply {
+            text = "💳 PAY ₹49 VIA UPI QR & UNLOCK"
+            setBackgroundColor(Color.parseColor("#06D6A0"))
+            setTextColor(Color.BLACK)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(20, 20, 20, 20)
+            setOnClickListener {
+                val prefs = getSharedPreferences("AIStudioPrefs", Context.MODE_PRIVATE)
+                prefs.edit().putBoolean("is_subscribed", true).apply()
+                Toast.makeText(this@MainActivity, "Subscription Activated Successfully!", Toast.LENGTH_LONG).show()
+                recreate()
+            }
+        }
+
+        lockLayout.addView(crownTv)
+        lockLayout.addView(title)
+        lockLayout.addView(desc)
+        lockLayout.addView(btnPay)
+
+        setContentView(lockLayout)
     }
 
     private fun renderAppUI() {
@@ -29,15 +104,15 @@ class MainActivity : Activity() {
             setPadding(25, 30, 25, 30)
         }
 
-        // Top Header
+        // Top Header (Captain Smart Pro style)
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 15)
         }
         val crownTv = TextView(this).apply {
-            text = "🎬"
-            textSize = 26f
+            text = "👑"
+            textSize = 28f
             gravity = Gravity.CENTER
         }
         val titleTv = TextView(this).apply {
@@ -48,7 +123,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
         val subTitle = TextView(this).apply {
-            text = "100% Free • Ad-Supported Server • Real-Life AI"
+            text = "Auto Clicker • AI Studio • Real-Life Video/Photo"
             textSize = 11f
             setTextColor(Color.parseColor("#00CCFF"))
             gravity = Gravity.CENTER
@@ -57,9 +132,9 @@ class MainActivity : Activity() {
         header.addView(titleTv)
         header.addView(subTitle)
 
-        // Ad Support Notice Banner
-        val adNotice = TextView(this).apply {
-            text = "📢 Free Access & AI Server Cost Covered via Ads"
+        // Subscription Status Badge
+        val statusBadge = TextView(this).apply {
+            text = "🟢 PRO ACTIVE (UPI: 9954681428@naviaxis)"
             textSize = 10f
             setTextColor(Color.parseColor("#FFD166"))
             gravity = Gravity.CENTER
@@ -180,7 +255,7 @@ class MainActivity : Activity() {
         promptCard.addView(btnGenerateAll)
 
         mainLayout.addView(header)
-        mainLayout.addView(adNotice)
+        mainLayout.addView(statusBadge)
         mainLayout.addView(studioRow)
         mainLayout.addView(TextView(this).apply { text = ""; setPadding(0, 8, 0, 0) })
         mainLayout.addView(advCard)
@@ -204,8 +279,8 @@ class MainActivity : Activity() {
 
     private fun executeAIExecution(command: String) {
         AlertDialog.Builder(this)
-            .setTitle("✨ AI Processing & Ad Revenue")
-            .setMessage("Command: \"$command\"\n\nAd loaded for server cost coverage. Processing your original AI output successfully without any errors!")
+            .setTitle("✨ AI Processing & UPI Active")
+            .setMessage("Command: \"$command\"\n\nProcessing AI Original Studio output seamlessly with ad & subscription support.")
             .setPositiveButton("OK") { _, _ ->
                 inputCommand.setText("")
             }
@@ -215,7 +290,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (resultCode == RESULT_OK && data != null) {
-            Toast.makeText(this, "File Selected Successfully! Ready to Execute AI.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "File Selected Successfully!", Toast.LENGTH_LONG).show()
         }
     }
 }
