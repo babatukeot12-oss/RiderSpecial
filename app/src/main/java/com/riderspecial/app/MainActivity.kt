@@ -21,6 +21,7 @@ import android.speech.tts.TextToSpeech
 import android.text.InputType
 import android.util.Base64
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -334,7 +335,11 @@ class MainActivity : Activity() {
                 if (passEt.text.toString() == adminPassport) {
                     showAdminDashboardScreen(ctx, targetRiderId)
                 } else {
-                    Toast.makeText(ctx, "Invalid Passport", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        ctx,
+                        if (selectedLang == "HI") "गलत पासवर्ड" else "Invalid Passport",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -601,7 +606,10 @@ class MainActivity : Activity() {
                         toggleAppLanguage(ctx)
                         showAdminDashboardScreen(ctx, defaultRiderId)
                     }
-                    "Back to Rider Panel" -> loadAndStart(ctx, Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown")
+                    "Back to Rider Panel" -> {
+                        val hw = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
+                        loadAndStart(ctx, hw)
+                    }
                 }
                 true
             }
@@ -627,7 +635,7 @@ class MainActivity : Activity() {
         box.addView(infoTv)
         scroll.addView(box)
 
-        val dialog = AlertDialog.Builder(ctx)
+        AlertDialog.Builder(ctx)
             .setTitle(if (onlyOnline) "Online Riders" else "Total Riders")
             .setView(scroll)
             .setNegativeButton("Close", null)
@@ -678,7 +686,6 @@ class MainActivity : Activity() {
                 }
         } catch (_: Exception) {
             infoTv.text = "Unable to load riders list."
-            dialog.setTitle(if (onlyOnline) "Online Riders" else "Total Riders")
         }
     }
 
@@ -1150,7 +1157,6 @@ class MainActivity : Activity() {
             .show()
     }
 
-    // Payment screen after trial/subscription ends (no trial countdown shown to rider)
     private fun showPaymentLockScreen(ctx: Context, riderId: String, riderName: String) {
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
@@ -1233,7 +1239,6 @@ class MainActivity : Activity() {
         setContentView(scroll)
     }
 
-    // Rider dashboard (no trial badge shown; existing pickup/drop/amount/activate/auto-accept flow preserved)
     private fun showRiderDashboard(ctx: Context, riderId: String, riderName: String) {
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val pickupDef = prefs.getString("pickup_km", "1.0") ?: "1.0"
@@ -1716,7 +1721,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun saveScreenshotToGallery(ctx: Context, targetView: android.view.View): Boolean {
+    private fun saveScreenshotToGallery(ctx: Context, targetView: View): Boolean {
         return try {
             val w = targetView.width
             val h = targetView.height
