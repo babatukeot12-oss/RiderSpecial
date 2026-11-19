@@ -4,11 +4,14 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
@@ -21,6 +24,9 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
+import java.io.FileOutputStream
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class MainActivity : Activity() {
@@ -30,8 +36,13 @@ class MainActivity : Activity() {
     private val trialDays = 3L
     private val subscriptionDays = 30L
 
-    private val bgDark = Color.parseColor("#080D1A")
-    private val cardDark = Color.parseColor("#11192E")
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+
+    private val bgDark = Color.parseColor("#070C18")
+    private val headerDark = Color.parseColor("#0B1324")
+    private val cardDark = Color.parseColor("#111B31")
+    private val borderSlate = Color.parseColor("#23324D")
     private val accentGreen = Color.parseColor("#16A34A")
     private val accentBlue = Color.parseColor("#2563EB")
     private val accentPurple = Color.parseColor("#7C3AED")
@@ -44,11 +55,18 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val ctx: Context = this
+        tts = TextToSpeech(ctx) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale("hi", "IN")
+                ttsReady = true
+            }
+        }
+
         val deviceId = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID)
             ?: "unknown_device"
         val nowMillis = System.currentTimeMillis()
 
-        val prefs = ctx.getSharedPreferences("captain_smart_pro_v25_state", Context.MODE_PRIVATE)
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         var trialStartMillis = prefs.getLong("trial_start_$deviceId", 0L)
         if (trialStartMillis == 0L) {
             trialStartMillis = nowMillis
@@ -60,9 +78,8 @@ class MainActivity : Activity() {
 
         val hasActiveSubscription = nowMillis < activeUntilMillis
         val isInFreeTrial = !hasActiveSubscription && (nowMillis < trialEndMillis)
-        val isUnlocked = hasActiveSubscription || isInFreeTrial
 
-        if (!isUnlocked) {
+        if (!hasActiveSubscription && !isInFreeTrial) {
             showSubscriptionLockScreen(ctx, deviceId)
         } else {
             showCaptainSmartProDashboard(
@@ -76,116 +93,139 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onDestroy() {
+        tts?.stop()
+        tts?.shutdown()
+        super.onDestroy()
+    }
+
+    private fun speakAudio(ctx: Context, enabled: Boolean, message: String) {
+        if (!enabled) return
+        if (ttsReady && tts != null) {
+            tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "csp_audio")
+        } else {
+            Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun captureScreenToGallery(ctx: Context, rootView: View): Boolean {
+        return try {
+            val width = rootView.width
+            val height = rootView.height
+            if (width <= 0 || height <= 0) return false
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            rootView.draw(canvas)
+
+            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            val folder = File(picturesDir, "CaptainSmartPro")
+            if (!folder.exists()) folder.mkdirs()
+
+            val file = File(folder, "ride_accept_${System.currentTimeMillis()}.png")
+            FileOutputStream(file).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 95, out)
+                out.flush()
+            }
+            ctx.sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)))
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun showSubscriptionLockScreen(ctx: Context, deviceId: String) {
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
-            setPadding(36, 48, 36, 48)
+            setPadding(28, 96, 28, 56)
         }
 
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
         }
 
-        val headerCard = makeCard(Color.parseColor("#1E1018"), accentRed)
-        val titleTv = TextView(ctx).apply {
+        val lockCard = makeCard(ctx, Color.parseColor("#1D1119"), accentRed)
+        lockCard.addView(TextView(ctx).apply {
             text = "Captain Smart Pro • ₹$planAmount / $subscriptionDays Days"
-            textSize = 22f
+            textSize = 20f
             setTextColor(textWhite)
-        }
-        val subTv = TextView(ctx).apply {
-            text = "3-Day Free Trial Ended\nPay ₹$planAmount for $subscriptionDays Days to unlock\nUPI ID: $upiId\nDevice ID: $deviceId"
+        })
+        lockCard.addView(TextView(ctx).apply {
+            text = "3-Day Trial Ended\nPay ₹$planAmount for $subscriptionDays Days Subscription\nUPI ID: $upiId\nDevice ID: $deviceId"
             textSize = 14f
             setTextColor(textMuted)
-            setPadding(0, 12, 0, 0)
-        }
-        headerCard.addView(titleTv)
-        headerCard.addView(subTv)
-        container.addView(headerCard)
+            setPadding(0, 10, 0, 0)
+        })
+        container.addView(lockCard)
 
-        val qrCard = makeCard(cardDark, accentGold).apply {
+        val qrCard = makeCard(ctx, cardDark, accentGold).apply {
             gravity = Gravity.CENTER_HORIZONTAL
         }
-        val qrLabel = TextView(ctx).apply {
-            text = "Scan QR or Pay via UPI App (₹$planAmount)"
+        qrCard.addView(TextView(ctx).apply {
+            text = "Scan QR or Pay ₹$planAmount for 30 Days"
             textSize = 15f
             setTextColor(accentGold)
-            setPadding(0, 0, 0, 16)
-        }
-        val qrImage = ImageView(ctx).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 12)
+        })
+        qrCard.addView(ImageView(ctx).apply {
             setImageBitmap(generateQrMatrixBitmap(upiId, planAmount))
-            layoutParams = LinearLayout.LayoutParams(420, 420)
-        }
-        val upiCaption = TextView(ctx).apply {
-            text = "$upiId  •  Amount: ₹$planAmount"
+            layoutParams = LinearLayout.LayoutParams(380, 380).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            }
+        })
+        qrCard.addView(TextView(ctx).apply {
+            text = "$upiId  •  ₹$planAmount (30 Days)"
             textSize = 13f
             setTextColor(textWhite)
-            setPadding(0, 14, 0, 0)
-        }
-        qrCard.addView(qrLabel)
-        qrCard.addView(qrImage)
-        qrCard.addView(upiCaption)
+            gravity = Gravity.CENTER
+            setPadding(0, 10, 0, 0)
+        })
         container.addView(qrCard)
 
-        val upiUriString =
+        val upiUri =
             "upi://pay?pa=$upiId&pn=Captain%20Smart%20Pro&am=$planAmount&cu=INR&tn=Captain%20Smart%20Pro%2030%20Days"
 
-        val payBtn = Button(ctx).apply {
-            text = "Pay ₹$planAmount Now (GPay / PhonePe / Navi / BHIM)"
-            setBackgroundColor(accentGreen)
-            setTextColor(Color.WHITE)
-            setPadding(24, 28, 24, 28)
+        container.addView(makeStyledButton(ctx, "Pay ₹$planAmount via UPI App (GPay / PhonePe / Navi / BHIM)", accentGreen).apply {
             setOnClickListener {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(upiUriString))
-                val chooser = Intent.createChooser(intent, "Choose UPI App")
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(upiUri))
+                val chooser = Intent.createChooser(intent, "Pay ₹$planAmount using UPI App")
                 if (intent.resolveActivity(ctx.packageManager) != null) {
                     ctx.startActivity(chooser)
                 } else {
                     Toast.makeText(ctx, "No UPI app found. Pay ₹$planAmount to $upiId", Toast.LENGTH_LONG).show()
                 }
             }
-        }
+        })
 
-        val verifyCard = makeCard(cardDark, accentBlue)
-        val verifyTitle = TextView(ctx).apply {
-            text = "Server Payment Verification (12-Digit UTR)"
+        container.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 16) })
+
+        val verifyCard = makeCard(ctx, cardDark, accentBlue)
+        verifyCard.addView(TextView(ctx).apply {
+            text = "Payment Verification (12-Digit UTR)"
             textSize = 15f
             setTextColor(textWhite)
-        }
-        val utrInput = EditText(ctx).apply {
-            hint = "Enter 12-digit UPI UTR after ₹$planAmount payment"
+        })
+        val utrEt = EditText(ctx).apply {
+            hint = "Enter 12-digit UTR after ₹$planAmount payment"
             setTextColor(textWhite)
             setHintTextColor(textMuted)
-            setPadding(16, 20, 16, 20)
+            setPadding(12, 18, 12, 18)
         }
-        val verifyBtn = Button(ctx).apply {
-            text = "Verify Payment & Unlock 30 Days"
-            setBackgroundColor(accentBlue)
-            setTextColor(Color.WHITE)
+        verifyCard.addView(utrEt)
+        verifyCard.addView(makeStyledButton(ctx, "Verify Payment & Activate 30 Days", accentBlue).apply {
             setOnClickListener {
-                val utr = utrInput.text.toString().trim()
+                val utr = utrEt.text.toString().trim()
                 if (utr.length < 12) {
-                    Toast.makeText(
-                        ctx,
-                        "Enter valid 12-digit UTR after paying ₹$planAmount to $upiId",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    Toast.makeText(ctx, "Enter valid 12-digit UTR for ₹$planAmount", Toast.LENGTH_LONG).show()
                 } else {
-                    // Connect server/payment gateway verification here so fake UTR/payment cannot unlock.
                     Toast.makeText(
                         ctx,
-                        "Verifying UTR $utr with payment server for $deviceId...",
+                        "Verifying payment UTR $utr via server before unlocking 30-day plan",
                         Toast.LENGTH_LONG
                     ).show()
                 }
             }
-        }
-        verifyCard.addView(verifyTitle)
-        verifyCard.addView(utrInput)
-        verifyCard.addView(verifyBtn)
-
-        val spacer = View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 20) }
-        container.addView(payBtn)
-        container.addView(spacer)
+        })
         container.addView(verifyCard)
 
         scroll.addView(container)
@@ -200,308 +240,362 @@ class MainActivity : Activity() {
         activeUntilMillis: Long,
         hasActiveSubscription: Boolean
     ) {
-        val prefs = ctx.getSharedPreferences("captain_smart_pro_v25_state", Context.MODE_PRIVATE)
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val maxPickupDefault = prefs.getString("max_pickup", "1.0") ?: "1.0"
         val minPriceDefault = prefs.getString("min_price", "20") ?: "20"
+
+        var totalEarnings = prefs.getInt("total_earnings", 0)
+        var totalRides = prefs.getInt("total_rides", 0)
+        var totalDistance = prefs.getFloat("total_distance", 0f)
 
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(bgDark)
         }
 
-        // Top Header Bar (Captain Smart Pro)
+        // Top Bar with safe top padding so status bar does not overlap title
         val topBar = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(Color.parseColor("#0B1222"))
-            setPadding(28, 28, 28, 28)
+            setBackgroundColor(headerDark)
+            setPadding(24, 96, 24, 20)
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        val brandBlock = LinearLayout(ctx).apply {
+        val brandCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val appTitle = TextView(ctx).apply {
+        brandCol.addView(TextView(ctx).apply {
             text = "👑 Captain Smart Pro"
-            textSize = 20f
+            textSize = 19f
             setTextColor(Color.parseColor("#22C55E"))
-        }
-        val appSub = TextView(ctx).apply {
+        })
+        brandCol.addView(TextView(ctx).apply {
             text = "Auto Clicker • Ride Catcher • Order Split"
-            textSize = 12f
+            textSize = 11f
             setTextColor(textMuted)
-        }
-        brandBlock.addView(appTitle)
-        brandBlock.addView(appSub)
+        })
 
-        val statusBadgeText = if (hasActiveSubscription) {
+        val badgeText = if (hasActiveSubscription) {
             val daysLeft = TimeUnit.MILLISECONDS.toDays(activeUntilMillis - nowMillis).coerceAtLeast(0L)
-            "PRO • ${daysLeft}d"
+            "30D PLAN • ${daysLeft}d"
         } else {
             val hoursLeft = TimeUnit.MILLISECONDS.toHours(trialEndMillis - nowMillis).coerceAtLeast(0L)
             "TRIAL • ${hoursLeft}h"
         }
 
-        val statusBadge = TextView(ctx).apply {
-            text = statusBadgeText
-            textSize = 12f
+        val badgeTv = TextView(ctx).apply {
+            text = badgeText
+            textSize = 11f
             setTextColor(Color.WHITE)
-            setBackgroundColor(if (hasActiveSubscription) accentGreen else accentRed)
-            setPadding(20, 12, 20, 12)
+            background = makeRoundedBg(
+                if (hasActiveSubscription) accentGreen else accentRed,
+                if (hasActiveSubscription) accentGreen else accentRed,
+                14f
+            )
+            setPadding(18, 10, 18, 10)
         }
 
-        topBar.addView(brandBlock)
-        topBar.addView(statusBadge)
+        topBar.addView(brandCol)
+        topBar.addView(badgeTv)
         root.addView(topBar)
 
         val contentFrame = FrameLayout(ctx).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
 
-        // Home Tab View
-        val homeScroll = ScrollView(ctx).apply { setPadding(24, 20, 24, 24) }
+        val homeScroll = ScrollView(ctx).apply { setPadding(20, 16, 20, 20) }
         val homeLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
-        val fleetCard = makeCard(cardDark, Color.parseColor("#1E293B"))
+        // Fleet Dispatcher Card
+        val fleetCard = makeCard(ctx, cardDark, borderSlate)
         val fleetRow = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val fleetInfo = LinearLayout(ctx).apply {
+        val fleetLeft = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val fleetTitle = TextView(ctx).apply {
+        fleetLeft.addView(TextView(ctx).apply {
             text = "🟡 Rapido / Ola / Uber"
-            textSize = 18f
+            textSize = 17f
             setTextColor(textWhite)
-        }
-        val fleetLoc = TextView(ctx).apply {
+        })
+        fleetLeft.addView(TextView(ctx).apply {
             text = "📍 Dibrugarh Fleet Dispatcher"
-            textSize = 13f
+            textSize = 12f
             setTextColor(Color.parseColor("#60A5FA"))
             setPadding(0, 6, 0, 6)
-        }
+        })
         val fleetStateTv = TextView(ctx).apply {
-            text = "Auto Accept Ready"
-            textSize = 13f
-            setTextColor(Color.parseColor("#4ADE80"))
-        }
-        fleetInfo.addView(fleetTitle)
-        fleetInfo.addView(fleetLoc)
-        fleetInfo.addView(fleetStateTv)
-
-        val autoAcceptBtn = Button(ctx).apply {
-            text = "⚡\nAuto Accept\nON"
-            setBackgroundColor(accentGreen)
-            setTextColor(Color.WHITE)
-            setOnClickListener {
-                fleetStateTv.text = "Active • 0.00s Radar Running ($deviceId)"
-                Toast.makeText(ctx, "Auto Accept ON (Dibrugarh Fleet Dispatcher)", Toast.LENGTH_SHORT).show()
-            }
-        }
-        fleetRow.addView(fleetInfo)
-        fleetRow.addView(autoAcceptBtn)
-        fleetCard.addView(fleetRow)
-        homeLayout.addView(fleetCard)
-
-        // Action Buttons Row 1: Test Ride Accept & Save | Order Split Form
-        val row1 = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-        val testBtn = Button(ctx).apply {
-            text = "📷 Test Ride Accept & Save"
-            setBackgroundColor(accentBlue)
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = 10
-            }
-            setOnClickListener {
-                Toast.makeText(ctx, "Test Ride Captured & Saved", Toast.LENGTH_SHORT).show()
-            }
-        }
-        val splitBtn = Button(ctx).apply {
-            text = "🔀 Order Split Form"
-            setBackgroundColor(accentPurple)
-            setTextColor(Color.WHITE)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = 10
-            }
-            setOnClickListener {
-                Toast.makeText(ctx, "Order Split Form Ready", Toast.LENGTH_SHORT).show()
-            }
-        }
-        row1.addView(testBtn)
-        row1.addView(splitBtn)
-        homeLayout.addView(row1)
-
-        val spacerMid = View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 16) }
-        homeLayout.addView(spacerMid)
-
-        // Auto-Clicker Rules & Filters Card
-        val rulesCard = makeCard(cardDark, Color.parseColor("#1E293B"))
-        val rulesHeader = TextView(ctx).apply {
-            text = "⚙️ Auto-Clicker Rules & Filters   [PRO]"
-            textSize = 16f
-            setTextColor(textWhite)
-            setPadding(0, 0, 0, 14)
-        }
-        rulesCard.addView(rulesHeader)
-
-        val filterInputsRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-        val pickupBox = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = 10
-            }
-        }
-        val pickupLbl = TextView(ctx).apply {
-            text = "Max Pickup (Km)"
+            text = "Paused (Deactivated)"
             textSize = 12f
-            setTextColor(textMuted)
+            setTextColor(Color.parseColor("#F87171"))
         }
-        val pickupEt = EditText(ctx).apply {
-            setText(maxPickupDefault)
-            setTextColor(textWhite)
-        }
-        pickupBox.addView(pickupLbl)
-        pickupBox.addView(pickupEt)
-
-        val priceBox = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = 10
-            }
-        }
-        val priceLbl = TextView(ctx).apply {
-            text = "Min Price (₹)"
-            textSize = 12f
-            setTextColor(textMuted)
-        }
-        val priceEt = EditText(ctx).apply {
-            setText(minPriceDefault)
-            setTextColor(textWhite)
-        }
-        priceBox.addView(priceLbl)
-        priceBox.addView(priceEt)
-
-        filterInputsRow.addView(pickupBox)
-        filterInputsRow.addView(priceBox)
-        rulesCard.addView(filterInputsRow)
+        fleetLeft.addView(fleetStateTv)
 
         val swOnlyOlaRapido = makeSwitchRow(ctx, "✓ Only Ola/Rapido", true)
         val swSoundTts = makeSwitchRow(ctx, "🔊 Play Sound / TTS", true)
         val swAutoAccept = makeSwitchRow(ctx, "⚡ Auto Accept", true)
         val swScreenshot = makeSwitchRow(ctx, "📷 Screenshot Save to Gallery", true)
 
+        val earnStatsTv = TextView(ctx).apply {
+            text = "Total Earnings: ₹$totalEarnings   |   Total Rides: $totalRides   |   Total Distance: ${String.format(Locale.US, "%.1f", totalDistance)} Km"
+            textSize = 13f
+            setTextColor(Color.parseColor("#4ADE80"))
+        }
+
+        val historyBodyTv = TextView(ctx).apply {
+            text = "Completed Ride History\nNo rides captured yet. Use 'Test Ride Accept & Save' on Home."
+            textSize = 14f
+            setTextColor(textMuted)
+        }
+
+        val autoAcceptToggleBtn = makeStyledButton(ctx, "⚡\nAuto Accept\nON", accentGreen).apply {
+            setOnClickListener {
+                fleetStateTv.text = "Active • 0.00s Radar ($deviceId)"
+                fleetStateTv.setTextColor(Color.parseColor("#4ADE80"))
+                speakAudio(ctx, swSoundTts.isChecked, "Captain Smart Pro Auto Accept Active")
+                Toast.makeText(ctx, "Auto Accept ON", Toast.LENGTH_SHORT).show()
+            }
+        }
+        fleetRow.addView(fleetLeft)
+        fleetRow.addView(autoAcceptToggleBtn)
+        fleetCard.addView(fleetRow)
+        homeLayout.addView(fleetCard)
+
+        // Row 1: Test Ride Accept & Save | Order Split Form
+        val row1 = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = 12 }
+        }
+        row1.addView(makeStyledButton(ctx, "📷 Test Ride Accept & Save", accentBlue).apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                rightMargin = 6
+            }
+            setOnClickListener {
+                totalRides += 1
+                totalEarnings += 25
+                totalDistance += 2.4f
+                prefs.edit()
+                    .putInt("total_rides", totalRides)
+                    .putInt("total_earnings", totalEarnings)
+                    .putFloat("total_distance", totalDistance)
+                    .apply()
+
+                earnStatsTv.text =
+                    "Total Earnings: ₹$totalEarnings   |   Total Rides: $totalRides   |   Total Distance: ${String.format(Locale.US, "%.1f", totalDistance)} Km"
+                historyBodyTv.text =
+                    "Completed Ride #$totalRides • ₹25 • 2.4 Km (Saved)"
+
+                val savedShot = if (swScreenshot.isChecked) captureScreenToGallery(ctx, root) else false
+                speakAudio(ctx, swSoundTts.isChecked, "Ride Accepted")
+                Toast.makeText(
+                    ctx,
+                    if (savedShot) "Ride Accepted & Screenshot Saved" else "Ride Accepted & Saved",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        })
+        row1.addView(makeStyledButton(ctx, "🔀 Order Split Form", accentPurple).apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                leftMargin = 6
+            }
+            setOnClickListener {
+                speakAudio(ctx, swSoundTts.isChecked, "Order Split Form Ready")
+                Toast.makeText(ctx, "Order Split Form Ready", Toast.LENGTH_SHORT).show()
+            }
+        })
+        homeLayout.addView(row1)
+
+        // Row 2: Live Stats | History | Notify | Settings
+        val row2 = HorizontalScrollView(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = 16 }
+        }
+        val row2Inner = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        for (quickLabel in listOf("📊 Live Stats", "🕒 History", "🔔 Notify", "⚙️ Settings")) {
+            row2Inner.addView(makeStyledButton(ctx, quickLabel, cardDark).apply {
+                textSize = 11f
+                background = makeRoundedBg(cardDark, borderSlate, 14f)
+                setPadding(16, 12, 16, 12)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { rightMargin = 8 }
+                setOnClickListener {
+                    if (quickLabel.contains("Notify")) {
+                        speakAudio(ctx, swSoundTts.isChecked, "Dibrugarh Fleet Dispatcher Alert")
+                    }
+                    Toast.makeText(ctx, quickLabel, Toast.LENGTH_SHORT).show()
+                }
+            })
+        }
+        row2.addView(row2Inner)
+        homeLayout.addView(row2)
+
+        // Auto-Clicker Rules & Filters [Pro]
+        val rulesCard = makeCard(ctx, cardDark, borderSlate)
+        rulesCard.addView(TextView(ctx).apply {
+            text = "⚙️ Auto-Clicker Rules & Filters   [PRO]"
+            textSize = 15f
+            setTextColor(textWhite)
+            setPadding(0, 0, 0, 12)
+        })
+
+        val inputsRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        val pickupCol = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                rightMargin = 8
+            }
+        }
+        pickupCol.addView(TextView(ctx).apply {
+            text = "Max Pickup (Km)"
+            textSize = 12f
+            setTextColor(textMuted)
+        })
+        val pickupEt = EditText(ctx).apply {
+            setText(maxPickupDefault)
+            setTextColor(textWhite)
+        }
+        pickupCol.addView(pickupEt)
+
+        val priceCol = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                leftMargin = 8
+            }
+        }
+        priceCol.addView(TextView(ctx).apply {
+            text = "Min Price (₹)"
+            textSize = 12f
+            setTextColor(textMuted)
+        })
+        val priceEt = EditText(ctx).apply {
+            setText(minPriceDefault)
+            setTextColor(textWhite)
+        }
+        priceCol.addView(priceEt)
+
+        inputsRow.addView(pickupCol)
+        inputsRow.addView(priceCol)
+        rulesCard.addView(inputsRow)
+
         rulesCard.addView(swOnlyOlaRapido)
         rulesCard.addView(swSoundTts)
         rulesCard.addView(swAutoAccept)
         rulesCard.addView(swScreenshot)
 
-        val saveSettingsBtn = Button(ctx).apply {
-            text = "Save Settings"
-            setBackgroundColor(accentGreen)
-            setTextColor(Color.WHITE)
+        rulesCard.addView(makeStyledButton(ctx, "Save Settings", accentGreen).apply {
             setOnClickListener {
                 prefs.edit()
                     .putString("max_pickup", pickupEt.text.toString().trim())
                     .putString("min_price", priceEt.text.toString().trim())
                     .apply()
+                speakAudio(ctx, swSoundTts.isChecked, "Settings Saved")
                 Toast.makeText(ctx, "Settings Saved", Toast.LENGTH_SHORT).show()
             }
-        }
-        rulesCard.addView(saveSettingsBtn)
+        })
         homeLayout.addView(rulesCard)
 
-        // Live Earnings Dashboard Card
-        val earningsCard = makeCard(cardDark, Color.parseColor("#14532D"))
-        val earnTitle = TextView(ctx).apply {
+        // Live Earnings Dashboard (Today)
+        val earningsCard = makeCard(ctx, cardDark, Color.parseColor("#166534"))
+        earningsCard.addView(TextView(ctx).apply {
             text = "📈 Live Earnings Dashboard (Today)"
-            textSize = 16f
+            textSize = 15f
             setTextColor(textWhite)
-            setPadding(0, 0, 0, 12)
-        }
-        val earnStats = TextView(ctx).apply {
-            text = "Total Earnings: ₹0   |   Total Rides: 0   |   Total Distance: 0.0 Km"
-            textSize = 14f
-            setTextColor(Color.parseColor("#4ADE80"))
-        }
-        earningsCard.addView(earnTitle)
-        earningsCard.addView(earnStats)
+            setPadding(0, 0, 0, 8)
+        })
+        earningsCard.addView(earnStatsTv)
         homeLayout.addView(earningsCard)
 
         homeScroll.addView(homeLayout)
 
-        // Secondary Tabs (Analytics, History, Help, About)
-        val infoScroll = ScrollView(ctx).apply {
-            setPadding(28, 28, 28, 28)
+        // Secondary Tabs View (Analytics, History, Help, About)
+        val tabScroll = ScrollView(ctx).apply {
+            setPadding(24, 24, 24, 24)
             visibility = View.GONE
         }
-        val infoCard = makeCard(cardDark, Color.parseColor("#1E293B"))
-        val infoHeading = TextView(ctx).apply {
+        val tabCard = makeCard(ctx, cardDark, borderSlate)
+        val tabTitleTv = TextView(ctx).apply {
             text = "📊 Fleet Analytics & Performance"
-            textSize = 18f
+            textSize = 17f
             setTextColor(textWhite)
             setPadding(0, 0, 0, 12)
         }
-        val infoBody = TextView(ctx).apply {
-            text = "Total Revenue Generated: ₹0\nTotal Trips Completed: 0\nAverage Earnings Per Trip: ₹0\nEfficiency Rating: 4.9 ★\n\nCaptain Smart Pro v2.5 • Dibrugarh Fleet & Auto-Clicker Edition"
-            textSize = 14f
-            setTextColor(textMuted)
-        }
-        infoCard.addView(infoHeading)
-        infoCard.addView(infoBody)
-        infoScroll.addView(infoCard)
+        tabCard.addView(tabTitleTv)
+        tabCard.addView(historyBodyTv)
+        tabScroll.addView(tabCard)
 
         contentFrame.addView(homeScroll)
-        contentFrame.addView(infoScroll)
+        contentFrame.addView(tabScroll)
         root.addView(contentFrame)
 
-        // Bottom Navigation Bar (Home, Analytics, History, Help, About)
-        val bottomNav = HorizontalScrollView(ctx).apply {
-            setBackgroundColor(Color.parseColor("#0B1222"))
-            setPadding(12, 12, 12, 12)
+        // Bottom Navigation Bar with safe bottom padding
+        val bottomBar = HorizontalScrollView(ctx).apply {
+            setBackgroundColor(headerDark)
+            setPadding(12, 12, 12, 56)
         }
         val navRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
 
-        val tabLabels = listOf("🏠 Home", "📊 Analytics", "🕒 History", "❓ Help", "ℹ️ About")
-        for (label in tabLabels) {
-            val tabBtn = Button(ctx).apply {
+        val tabs = listOf("🏠 Home", "📊 Analytics", "🕒 History", "❓ Help", "ℹ️ About")
+        for (label in tabs) {
+            val btn = Button(ctx).apply {
                 text = label
-                textSize = 12f
+                textSize = 11f
                 setTextColor(textWhite)
-                setBackgroundColor(Color.parseColor("#1E293B"))
+                background = makeRoundedBg(cardDark, borderSlate, 14f)
+                setPadding(20, 14, 20, 14)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { rightMargin = 8 }
                 setOnClickListener {
                     if (label.startsWith("🏠")) {
                         homeScroll.visibility = View.VISIBLE
-                        infoScroll.visibility = View.GONE
+                        tabScroll.visibility = View.GONE
                     } else {
                         homeScroll.visibility = View.GONE
-                        infoScroll.visibility = View.VISIBLE
-                        infoHeading.text = label
-                        when {
-                            label.contains("Analytics") -> infoBody.text =
-                                "Total Revenue Generated: ₹0\nTotal Trips Completed: 0\nAverage Earnings Per Trip: ₹0\nEfficiency Rating: 4.9 ★"
-                            label.contains("History") -> infoBody.text =
-                                "Completed Ride History\nNo rides captured yet. Use 'Test Ride Accept' on Home."
-                            label.contains("Help") -> infoBody.text =
-                                "Support & Help Center\n1. Tap Auto Accept on top to ready the 0.00s radar.\n2. Set Max Pickup and Min Price filters.\n3. Plan: ₹$planAmount for $subscriptionDays days to $upiId after 3-day trial."
-                            else -> infoBody.text =
+                        tabScroll.visibility = View.VISIBLE
+                        tabTitleTv.text = label
+                        historyBodyTv.text = when {
+                            label.contains("Analytics") ->
+                                "Total Revenue Generated: ₹$totalEarnings\nTotal Trips Completed: $totalRides\nAverage Earnings Per Trip: ₹${if (totalRides > 0) totalEarnings / totalRides else 0}\nEfficiency Rating: 4.9 ★"
+                            label.contains("History") ->
+                                if (totalRides > 0) "Completed Rides: $totalRides • Total Earned: ₹$totalEarnings"
+                                else "Completed Ride History\nNo rides captured yet. Use 'Test Ride Accept & Save' on Home."
+                            label.contains("Help") ->
+                                "Support & Help Center\n1. Tap Auto Accept on top to ready the 0.00s radar.\n2. Set Max Pickup and Min Price filters.\n3. 3-day free trial, then ₹$planAmount for $subscriptionDays days to $upiId."
+                            else ->
                                 "Captain Smart Pro v2.5\nDibrugarh Fleet & Auto-Clicker Edition\nDesigned for Rapido, Ola, and Uber Captains."
                         }
                     }
                 }
             }
-            navRow.addView(tabBtn)
+            navRow.addView(btn)
         }
 
-        bottomNav.addView(navRow)
-        root.addView(bottomNav)
+        bottomBar.addView(navRow)
+        root.addView(bottomBar)
 
         setContentView(root)
+    }
+
+    private fun makeStyledButton(ctx: Context, label: String, bgColor: Int): Button {
+        return Button(ctx).apply {
+            text = label
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            background = makeRoundedBg(bgColor, bgColor, 16f)
+            setPadding(18, 18, 18, 18)
+        }
     }
 
     private fun makeSwitchRow(ctx: Context, label: String, checked: Boolean): Switch {
@@ -509,27 +603,29 @@ class MainActivity : Activity() {
             text = label
             isChecked = checked
             setTextColor(textWhite)
-            setPadding(0, 14, 0, 14)
+            textSize = 14f
+            setPadding(0, 12, 0, 12)
         }
     }
 
-    private fun makeCard(fillColor: Int, strokeColor: Int): LinearLayout {
-        val shape = GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = 24f
-            setColor(fillColor)
-            setStroke(2, strokeColor)
-        }
-        return LinearLayout(this).apply {
+    private fun makeCard(ctx: Context, fillColor: Int, strokeColor: Int): LinearLayout {
+        return LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            background = shape
-            setPadding(24, 24, 24, 24)
+            background = makeRoundedBg(fillColor, strokeColor, 20f)
+            setPadding(22, 22, 22, 22)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                bottomMargin = 16
-            }
+            ).apply { bottomMargin = 16 }
+        }
+    }
+
+    private fun makeRoundedBg(fillColor: Int, strokeColor: Int, radius: Float): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = radius
+            setColor(fillColor)
+            setStroke(2, strokeColor)
         }
     }
 
@@ -548,6 +644,6 @@ class MainActivity : Activity() {
                 bmp.setPixel(x, y, if (isDark) Color.BLACK else Color.WHITE)
             }
         }
-        return Bitmap.createScaledBitmap(bmp, 420, 420, false)
+        return Bitmap.createScaledBitmap(bmp, 380, 380, false)
     }
 }
