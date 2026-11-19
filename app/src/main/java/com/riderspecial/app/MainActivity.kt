@@ -19,7 +19,6 @@ import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.text.InputType
 import android.view.Gravity
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -30,10 +29,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
@@ -46,12 +42,12 @@ class MainActivity : Activity() {
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
-    private var selectedLang = "EN" // "EN" or "HI"
+    private var selectedLang = "EN"
 
     private var fbUrl = ""
+    private var waUrl = ""
     private var twUrl = ""
     private var ytUrl = ""
-    private var waUrl = ""
     private var broadcastMessage = ""
     private var customQrTitle = "Rider Payment QR"
 
@@ -87,126 +83,34 @@ class MainActivity : Activity() {
         val deviceId = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID)
             ?: "unknown_device"
 
-        loadStateAndSync(ctx, deviceId)
+        loadLocalAndSyncSafe(ctx, deviceId)
     }
 
     private fun applyTtsLanguage() {
         tts?.language = if (selectedLang == "HI") Locale("hi", "IN") else Locale.US
     }
 
-    private fun loadStateAndSync(ctx: Context, deviceId: String) {
+    private fun loadLocalAndSyncSafe(ctx: Context, deviceId: String) {
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val nowMillis = System.currentTimeMillis()
 
         configurableTrialDays = prefs.getLong("trial_days_global", 3L).coerceAtLeast(0L)
         fbUrl = prefs.getString("social_fb", "") ?: ""
+        waUrl = prefs.getString("social_wa", "") ?: ""
         twUrl = prefs.getString("social_tw", "") ?: ""
         ytUrl = prefs.getString("social_yt", "") ?: ""
-        waUrl = prefs.getString("social_wa", "") ?: ""
         broadcastMessage = prefs.getString("broadcast_msg", "") ?: ""
         customQrTitle = prefs.getString("custom_qr_title", "Rider Payment QR") ?: "Rider Payment QR"
 
-        var localTrialStart = prefs.getLong("trial_start_$deviceId", 0L)
-        if (localTrialStart == 0L) {
-            localTrialStart = nowMillis
-            prefs.edit().putLong("trial_start_$deviceId", localTrialStart).apply()
+        var trialStart = prefs.getLong("trial_start_$deviceId", 0L)
+        if (trialStart == 0L) {
+            trialStart = nowMillis
+            prefs.edit().putLong("trial_start_$deviceId", trialStart).apply()
         }
-        val localActiveUntil = prefs.getLong("active_until_$deviceId", 0L)
-
-        renderRiderScreen(ctx, deviceId, nowMillis, localTrialStart, localActiveUntil)
-
-        try {
-            val rootRef = FirebaseDatabase.getInstance().reference.child("captain_smart_pro")
-
-            rootRef.child("config").addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snap: DataSnapshot) {
-                    val trialFromDb = snap.child("trialDays").getValue(Long::class.java)
-                    if (trialFromDb != null && trialFromDb >= 0L) {
-                        configurableTrialDays = trialFromDb
-                        prefs.edit().putLong("trial_days_global", configurableTrialDays).apply()
-                    }
-                    fbUrl = snap.child("facebook").getValue(String::class.java) ?: fbUrl
-                    twUrl = snap.child("twitter").getValue(String::class.java) ?: twUrl
-                    ytUrl = snap.child("youtube").getValue(String::class.java) ?: ytUrl
-                    waUrl = snap.child("whatsapp").getValue(String::class.java) ?: waUrl
-                    broadcastMessage = snap.child("broadcast").getValue(String::class.java) ?: broadcastMessage
-                    customQrTitle = snap.child("qrTitle").getValue(String::class.java) ?: customQrTitle
-
-                    prefs.edit()
-                        .putString("social_fb", fbUrl)
-                        .putString("social_tw", twUrl)
-                        .putString("social_yt", ytUrl)
-                        .putString("social_wa", waUrl)
-                        .putString("broadcast_msg", broadcastMessage)
-                        .putString("custom_qr_title", customQrTitle)
-                        .apply()
-                }
-
-                override fun onCancelled(error: DatabaseError) {}
-            })
-
-            val devRef = rootRef.child("devices").child(deviceId)
-            devRef.addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snap: DataSnapshot) {
-                    val now = System.currentTimeMillis()
-                    var tStart = snap.child("trialStart").getValue(Long::class.java) ?: 0L
-                    val aUntil = snap.child("activeUntil").getValue(Long::class.java) ?: 0L
-                    val customDays = snap.child("customTrialDays").getValue(Long::class.java)
-
-                    if (tStart == 0L) {
-                        tStart = prefs.getLong("trial_start_$deviceId", now)
-                        devRef.updateChildren(
-                            mapOf(
-                                "deviceId" to deviceId,
-                                "trialStart" to tStart,
-                                "activeUntil" to aUntil,
-                                "lastSeen" to now
-                            )
-                        )
-                    } else {
-                        devRef.child("lastSeen").setValue(now)
-                    }
-
-                    prefs.edit()
-                        .putLong("trial_start_$deviceId", tStart)
-                        .putLong("active_until_$deviceId", aUntil)
-                        .apply()
-
-                    val effectiveTrialDays = (customDays ?: configurableTrialDays).coerceAtLeast(0L)
-                    val trialEnd = tStart + TimeUnit.DAYS.toMillis(effectiveTrialDays)
-                    val hasActiveSub = now < aUntil
-                    val inTrial = !hasActiveSub && (now < trialEnd)
-
-                    if (!hasActiveSub && !inTrial) {
-                        showLockScreen(ctx, deviceId)
-                    } else {
-                        showRiderDashboard(
-                            ctx = ctx,
-                            deviceId = deviceId,
-                            nowMillis = now,
-                            trialEndMillis = trialEnd,
-                            activeUntilMillis = aUntil,
-                            hasActiveSubscription = hasActiveSub
-                        )
-                    }
-                }
-
-                override fun onCancelled(error: DatabaseError) {}
-            })
-        } catch (_: Exception) {
-        }
-    }
-
-    private fun renderRiderScreen(
-        ctx: Context,
-        deviceId: String,
-        nowMillis: Long,
-        trialStartMillis: Long,
-        activeUntilMillis: Long
-    ) {
-        val trialEndMillis = trialStartMillis + TimeUnit.DAYS.toMillis(configurableTrialDays)
-        val hasActiveSub = nowMillis < activeUntilMillis
-        val inTrial = !hasActiveSub && (nowMillis < trialEndMillis)
+        val activeUntil = prefs.getLong("active_until_$deviceId", 0L)
+        val trialEnd = trialStart + TimeUnit.DAYS.toMillis(configurableTrialDays)
+        val hasActiveSub = nowMillis < activeUntil
+        val inTrial = !hasActiveSub && (nowMillis < trialEnd)
 
         if (!hasActiveSub && !inTrial) {
             showLockScreen(ctx, deviceId)
@@ -215,10 +119,40 @@ class MainActivity : Activity() {
                 ctx = ctx,
                 deviceId = deviceId,
                 nowMillis = nowMillis,
-                trialEndMillis = trialEndMillis,
-                activeUntilMillis = activeUntilMillis,
+                trialEndMillis = trialEnd,
+                activeUntilMillis = activeUntil,
                 hasActiveSubscription = hasActiveSub
             )
+        }
+
+        try {
+            FirebaseDatabase.getInstance().reference
+                .child("captain_smart_pro")
+                .child("config")
+                .get()
+                .addOnSuccessListener { snap ->
+                    val trialFromDb = snap.child("trialDays").getValue(Long::class.java)
+                    if (trialFromDb != null && trialFromDb >= 0L) {
+                        configurableTrialDays = trialFromDb
+                        prefs.edit().putLong("trial_days_global", configurableTrialDays).apply()
+                    }
+                    fbUrl = snap.child("facebook").getValue(String::class.java) ?: fbUrl
+                    waUrl = snap.child("whatsapp").getValue(String::class.java) ?: waUrl
+                    twUrl = snap.child("twitter").getValue(String::class.java) ?: twUrl
+                    ytUrl = snap.child("youtube").getValue(String::class.java) ?: ytUrl
+                    broadcastMessage = snap.child("broadcast").getValue(String::class.java) ?: broadcastMessage
+                    customQrTitle = snap.child("qrTitle").getValue(String::class.java) ?: customQrTitle
+
+                    prefs.edit()
+                        .putString("social_fb", fbUrl)
+                        .putString("social_wa", waUrl)
+                        .putString("social_tw", twUrl)
+                        .putString("social_yt", ytUrl)
+                        .putString("broadcast_msg", broadcastMessage)
+                        .putString("custom_qr_title", customQrTitle)
+                        .apply()
+                }
+        } catch (_: Exception) {
         }
     }
 
@@ -257,7 +191,6 @@ class MainActivity : Activity() {
             setBackgroundColor(bgDark)
         }
 
-        // Top Bar: Admin badge on left + 3-dot menu on right
         val topBar = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(headerDark)
@@ -266,14 +199,14 @@ class MainActivity : Activity() {
         }
 
         val adminLeftBtn = Button(ctx).apply {
-            text = "🛡️ Admin"
-            textSize = 12f
+            text = "Admin"
+            textSize = 11f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            background = makeRoundedBg(accentBlue, accentBlue, 14f)
-            setPadding(14, 8, 14, 8)
+            background = makeRoundedBg(accentBlue, accentBlue, 12f)
+            setPadding(12, 8, 12, 8)
             setOnClickListener {
-                Toast.makeText(ctx, "Admin Active • Device: $currentDeviceId", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, "Admin Active • ID: $currentDeviceId", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -284,8 +217,8 @@ class MainActivity : Activity() {
             }
         }
         brandCol.addView(TextView(ctx).apply {
-            text = "👑 Captain Smart Pro"
-            textSize = 18f
+            text = "Captain Smart Pro"
+            textSize = 17f
             setTypeface(null, Typeface.BOLD)
             setTextColor(accentGreenBright)
         })
@@ -300,7 +233,7 @@ class MainActivity : Activity() {
             textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
-            background = makeRoundedBg(cardElevated, borderSlate, 14f)
+            background = makeRoundedBg(cardElevated, borderSlate, 12f)
             setPadding(14, 6, 14, 6)
         }
 
@@ -340,7 +273,7 @@ class MainActivity : Activity() {
 
         val summaryCard = makeCard(ctx, cardDark, borderSlate)
         summaryCard.addView(TextView(ctx).apply {
-            text = "📅 Today's Summary"
+            text = "Today's Summary"
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -355,23 +288,18 @@ class MainActivity : Activity() {
 
         val msgCard = makeCard(ctx, cardDark, borderSlate)
         msgCard.addView(TextView(ctx).apply {
-            text = "✈️ Send Message to All Riders"
+            text = "Send Message to All Riders"
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
         })
-        msgCard.addView(TextView(ctx).apply {
-            text = "Send important update to all riders at once"
-            textSize = 12f
-            setTextColor(textMuted)
-            setPadding(0, 2, 0, 10)
-        })
         val broadcastInputEt = makeStyledInput(ctx, broadcastMessage, "Type your message here...")
+        msgCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
         msgCard.addView(broadcastInputEt)
         msgCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 10) })
 
         val msgBtnRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-        msgBtnRow.addView(makeStyledButton(ctx, "✈️ Send Message", accentBlue).apply {
+        msgBtnRow.addView(makeStyledButton(ctx, "Send Message", accentBlue).apply {
             textSize = 12f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 rightMargin = 6
@@ -388,10 +316,10 @@ class MainActivity : Activity() {
                         .setValue(msg)
                 } catch (_: Exception) {
                 }
-                Toast.makeText(ctx, "Broadcast sent to all riders", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, "Message saved & broadcast", Toast.LENGTH_SHORT).show()
             }
         })
-        msgBtnRow.addView(makeStyledButton(ctx, "👥 All Riders", accentPurple).apply {
+        msgBtnRow.addView(makeStyledButton(ctx, "All Riders", accentPurple).apply {
             textSize = 12f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 leftMargin = 6
@@ -405,43 +333,40 @@ class MainActivity : Activity() {
 
         val statusCard = makeCard(ctx, cardDark, borderSlate)
         statusCard.addView(TextView(ctx).apply {
-            text = "👥 Rider Status Details"
+            text = "Rider Status Details"
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
             setPadding(0, 0, 0, 8)
         })
         statusCard.addView(TextView(ctx).apply {
-            text = "✓ Online Now: 1   |   ✕ Offline Now: 0\n🛵 On Ride: 0   |   ✓ Available: 1"
+            text = "Online Now: 1   |   Offline Now: 0\nOn Ride: 0   |   Available: 1"
             textSize = 13f
             setTextColor(textMuted)
         })
         col.addView(statusCard)
 
-        col.addView(buildSocialLinksCard(ctx))
+        col.addView(buildCompactSocialLinksCard(ctx))
 
-        // Admin 3-Dot Menu with all management controls
         adminDotsBtn.setOnClickListener {
             val popup = PopupMenu(ctx, adminDotsBtn)
-            popup.menu.add("📅 Subscription Days (+/-)")
-            popup.menu.add("⏳ Free Trial Days (+/-)")
-            popup.menu.add("💬 Live Chat / Call Rider")
-            popup.menu.add("🌐 QR & Social Links")
-            popup.menu.add("🌐 Language: Hindi / English")
-            popup.menu.add("⚙️ Admin Settings")
-            popup.menu.add("🛵 Back to Rider Panel")
+            popup.menu.add("Subscription Days (+/-)")
+            popup.menu.add("Free Trial Days (+/-)")
+            popup.menu.add("Live Chat / Call Rider")
+            popup.menu.add("QR & Social Links")
+            popup.menu.add("Language: Hindi / English")
+            popup.menu.add("Back to Rider Panel")
             popup.setOnMenuItemClickListener { item ->
                 when (item.title.toString()) {
-                    "📅 Subscription Days (+/-)" -> openSubscriptionManagerDialog(ctx, currentDeviceId)
-                    "⏳ Free Trial Days (+/-)" -> openTrialManagerDialog(ctx, currentDeviceId)
-                    "💬 Live Chat / Call Rider" -> openDirectChatOrCallDialog(ctx, currentDeviceId)
-                    "🌐 QR & Social Links" -> openAdminLinksAndQrDialog(ctx)
-                    "🌐 Language: Hindi / English" -> {
-                        toggleAppLanguage(ctx, currentDeviceId)
+                    "Subscription Days (+/-)" -> openSubscriptionManagerDialog(ctx, currentDeviceId)
+                    "Free Trial Days (+/-)" -> openTrialManagerDialog(ctx, currentDeviceId)
+                    "Live Chat / Call Rider" -> openDirectChatOrCallDialog(ctx, currentDeviceId)
+                    "QR & Social Links" -> openAdminLinksAndQrDialog(ctx)
+                    "Language: Hindi / English" -> {
+                        toggleAppLanguage(ctx)
                         showAdminDashboardScreen(ctx, currentDeviceId)
                     }
-                    "⚙️ Admin Settings" -> Toast.makeText(ctx, "Device ID: $currentDeviceId", Toast.LENGTH_LONG).show()
-                    "🛵 Back to Rider Panel" -> loadStateAndSync(ctx, currentDeviceId)
+                    "Back to Rider Panel" -> loadLocalAndSyncSafe(ctx, currentDeviceId)
                 }
                 true
             }
@@ -453,7 +378,7 @@ class MainActivity : Activity() {
         setContentView(root)
     }
 
-    private fun toggleAppLanguage(ctx: Context, currentDeviceId: String) {
+    private fun toggleAppLanguage(ctx: Context) {
         selectedLang = if (selectedLang == "EN") "HI" else "EN"
         applyTtsLanguage()
         ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
@@ -465,46 +390,66 @@ class MainActivity : Activity() {
         speakText(ctx, true, if (selectedLang == "HI") "हिन्दी भाषा चुनी गई" else "English language selected")
     }
 
-    private fun buildSocialLinksCard(ctx: Context): LinearLayout {
+    // Compact 2x2 small-text social buttons inside a single card above the bottom edge
+    private fun buildCompactSocialLinksCard(ctx: Context): LinearLayout {
         val linksCard = makeCard(ctx, cardDark, borderSlate)
         linksCard.addView(TextView(ctx).apply {
-            text = if (selectedLang == "HI") "🌐 सोशल लिंक (Facebook • Twitter • YouTube • WhatsApp)" else "🌐 Social Links (Facebook • Twitter • YouTube • WhatsApp)"
-            textSize = 14f
+            text = "Social Links"
+            textSize = 13f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
-            setPadding(0, 0, 0, 10)
+            setPadding(0, 0, 0, 8)
         })
-        val links = listOf(
-            "Facebook" to fbUrl,
-            "Twitter" to twUrl,
-            "YouTube" to ytUrl,
-            "WhatsApp" to waUrl
-        )
-        for ((name, url) in links) {
-            linksCard.addView(Button(ctx).apply {
-                text = if (url.isNotBlank()) "$name • Open Link" else "$name • Not Set"
-                textSize = 12f
-                setTextColor(if (url.isNotBlank()) textWhite else textMuted)
-                background = makeRoundedBg(cardElevated, borderSlate, 12f)
-                setPadding(14, 10, 14, 10)
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = 8 }
-                setOnClickListener {
-                    if (url.isNotBlank()) {
-                        try {
-                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                        } catch (_: Exception) {
-                            Toast.makeText(ctx, "Invalid Link", Toast.LENGTH_SHORT).show()
-                        }
-                    } else {
-                        Toast.makeText(ctx, "$name link not set yet", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            })
+
+        val rowA = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = 8 }
         }
+        rowA.addView(makeSmallSocialBtn(ctx, "facebook", fbUrl, 6))
+        rowA.addView(makeSmallSocialBtn(ctx, "whatsapp", waUrl, 0))
+        linksCard.addView(rowA)
+
+        val rowB = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        rowB.addView(makeSmallSocialBtn(ctx, "twitter", twUrl, 6))
+        rowB.addView(makeSmallSocialBtn(ctx, "youtube", ytUrl, 0))
+        linksCard.addView(rowB)
+
         return linksCard
+    }
+
+    private fun makeSmallSocialBtn(ctx: Context, name: String, url: String, rightMarginPx: Int): Button {
+        val hasLink = url.isNotBlank()
+        return Button(ctx).apply {
+            text = if (hasLink) "$name • link" else "$name • not set"
+            textSize = 10f
+            isAllCaps = false
+            setTextColor(if (hasLink) textWhite else textMuted)
+            background = makeRoundedBg(cardElevated, borderSlate, 10f)
+            setPadding(8, 10, 8, 10)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                rightMargin = rightMarginPx
+            }
+            setOnClickListener {
+                if (hasLink) {
+                    try {
+                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    } catch (_: Exception) {
+                        Toast.makeText(ctx, "Invalid $name link", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(ctx, "$name link not set", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun openSubscriptionManagerDialog(ctx: Context, defaultDevId: String) {
@@ -528,7 +473,7 @@ class MainActivity : Activity() {
         box.addView(daysEt)
 
         AlertDialog.Builder(ctx)
-            .setTitle("📅 Subscription Manager")
+            .setTitle("Subscription Manager")
             .setView(box)
             .setPositiveButton("Apply") { _, _ ->
                 val targetId = devEt.text.toString().trim()
@@ -540,13 +485,8 @@ class MainActivity : Activity() {
                         .child("captain_smart_pro")
                         .child("devices")
                         .child(targetId)
-                        .updateChildren(
-                            mapOf(
-                                "deviceId" to targetId,
-                                "activeUntil" to newUntil,
-                                "updatedAt" to System.currentTimeMillis()
-                            )
-                        )
+                        .child("activeUntil")
+                        .setValue(newUntil)
                 } catch (_: Exception) {
                 }
                 Toast.makeText(ctx, "Updated $days days for $targetId", Toast.LENGTH_LONG).show()
@@ -576,7 +516,7 @@ class MainActivity : Activity() {
         box.addView(trialEt)
 
         AlertDialog.Builder(ctx)
-            .setTitle("⏳ Free Trial Manager")
+            .setTitle("Free Trial Manager")
             .setView(box)
             .setPositiveButton("Save Trial") { _, _ ->
                 val tDays = trialEt.text.toString().trim().toLongOrNull() ?: 3L
@@ -614,7 +554,7 @@ class MainActivity : Activity() {
             hint = "Direct chat message..."
         }
         val callBtn = Button(ctx).apply {
-            text = "📞 Call Rider"
+            text = "Call Rider"
             setOnClickListener {
                 val num = phoneEt.text.toString().trim()
                 if (num.isEmpty()) Toast.makeText(ctx, "Enter phone number", Toast.LENGTH_SHORT).show()
@@ -622,7 +562,7 @@ class MainActivity : Activity() {
             }
         }
         val chatBtn = Button(ctx).apply {
-            text = "💬 Send Direct Message"
+            text = "Send Direct Message"
             setOnClickListener {
                 val targetId = devEt.text.toString().trim()
                 val m = msgEt.text.toString().trim()
@@ -657,7 +597,7 @@ class MainActivity : Activity() {
         box.addView(chatBtn)
 
         AlertDialog.Builder(ctx)
-            .setTitle("💬 Direct Rider Chat & Call")
+            .setTitle("Direct Rider Chat & Call")
             .setView(box)
             .setNegativeButton("Close", null)
             .show()
@@ -678,6 +618,10 @@ class MainActivity : Activity() {
             hint = "Facebook Link"
             setText(fbUrl)
         }
+        val waEt = EditText(ctx).apply {
+            hint = "WhatsApp Link"
+            setText(waUrl)
+        }
         val twEt = EditText(ctx).apply {
             hint = "Twitter Link"
             setText(twUrl)
@@ -686,31 +630,27 @@ class MainActivity : Activity() {
             hint = "YouTube Link"
             setText(ytUrl)
         }
-        val waEt = EditText(ctx).apply {
-            hint = "WhatsApp Link"
-            setText(waUrl)
-        }
 
         box.addView(qrEt)
         box.addView(fbEt)
+        box.addView(waEt)
         box.addView(twEt)
         box.addView(ytEt)
-        box.addView(waEt)
         box.addView(Button(ctx).apply {
             text = "Save QR & Social Links"
             setOnClickListener {
                 customQrTitle = qrEt.text.toString().trim().ifEmpty { "Rider Payment QR" }
                 fbUrl = fbEt.text.toString().trim()
+                waUrl = waEt.text.toString().trim()
                 twUrl = twEt.text.toString().trim()
                 ytUrl = ytEt.text.toString().trim()
-                waUrl = waEt.text.toString().trim()
 
                 prefs.edit()
                     .putString("custom_qr_title", customQrTitle)
                     .putString("social_fb", fbUrl)
+                    .putString("social_wa", waUrl)
                     .putString("social_tw", twUrl)
                     .putString("social_yt", ytUrl)
-                    .putString("social_wa", waUrl)
                     .apply()
 
                 try {
@@ -721,9 +661,9 @@ class MainActivity : Activity() {
                             mapOf(
                                 "qrTitle" to customQrTitle,
                                 "facebook" to fbUrl,
+                                "whatsapp" to waUrl,
                                 "twitter" to twUrl,
-                                "youtube" to ytUrl,
-                                "whatsapp" to waUrl
+                                "youtube" to ytUrl
                             )
                         )
                 } catch (_: Exception) {
@@ -734,20 +674,20 @@ class MainActivity : Activity() {
         scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle("🌐 QR & Social Links")
+            .setTitle("QR & Social Links")
             .setView(scroll)
             .setNegativeButton("Close", null)
             .show()
     }
 
     private fun openRiderLiveChatDialog(ctx: Context, deviceId: String) {
-        val scroll = ScrollView(ctx)
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 24, 32, 20)
         }
         val chatTv = TextView(ctx).apply {
-            text = "Loading chat...\n"
+            text = prefs.getString("local_chat_$deviceId", "No messages yet.") ?: "No messages yet."
             textSize = 13f
             setPadding(0, 0, 0, 12)
         }
@@ -756,49 +696,40 @@ class MainActivity : Activity() {
         }
         val sendBtn = Button(ctx).apply {
             text = if (selectedLang == "HI") "भेजें" else "Send"
-        }
-
-        val chatRef = FirebaseDatabase.getInstance().reference
-            .child("captain_smart_pro")
-            .child("chats")
-            .child(deviceId)
-
-        chatRef.addValueEventListener(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val sb = StringBuilder()
-                for (row in snapshot.children) {
-                    val sender = row.child("sender").getValue(String::class.java) ?: "User"
-                    val msg = row.child("message").getValue(String::class.java) ?: ""
-                    sb.append("$sender: $msg\n")
+            setOnClickListener {
+                val txt = msgEt.text.toString().trim()
+                if (txt.isEmpty()) return@setOnClickListener
+                val updated = (chatTv.text.toString() + "\nRider: $txt").trim()
+                chatTv.text = updated
+                prefs.edit().putString("local_chat_$deviceId", updated).apply()
+                try {
+                    val chatRef = FirebaseDatabase.getInstance().reference
+                        .child("captain_smart_pro")
+                        .child("chats")
+                        .child(deviceId)
+                    val key = chatRef.push().key
+                    if (key != null) {
+                        chatRef.child(key).setValue(
+                            mapOf(
+                                "sender" to "Rider ($deviceId)",
+                                "message" to txt,
+                                "time" to System.currentTimeMillis()
+                            )
+                        )
+                    }
+                } catch (_: Exception) {
                 }
-                chatTv.text = if (sb.isEmpty()) "No messages yet." else sb.toString()
+                msgEt.setText("")
             }
-
-            override fun onCancelled(error: DatabaseError) {}
-        })
-
-        sendBtn.setOnClickListener {
-            val txt = msgEt.text.toString().trim()
-            if (txt.isEmpty()) return@setOnClickListener
-            val key = chatRef.push().key ?: return@setOnClickListener
-            chatRef.child(key).setValue(
-                mapOf(
-                    "sender" to "Rider ($deviceId)",
-                    "message" to txt,
-                    "time" to System.currentTimeMillis()
-                )
-            )
-            msgEt.setText("")
         }
 
         box.addView(chatTv)
         box.addView(msgEt)
         box.addView(sendBtn)
-        scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle(if (selectedLang == "HI") "💬 लाइव चैट" else "💬 Live Chat")
-            .setView(scroll)
+            .setTitle(if (selectedLang == "HI") "लाइव चैट" else "Live Chat")
+            .setView(box)
             .setNegativeButton(if (selectedLang == "HI") "बंद करें" else "Close", null)
             .show()
     }
@@ -866,9 +797,9 @@ class MainActivity : Activity() {
         scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle(if (selectedLang == "HI") "⚙️ राइडर सेटिंग्स" else "⚙️ Rider Settings")
+            .setTitle("Settings")
             .setView(scroll)
-            .setPositiveButton(if (selectedLang == "HI") "सेव करें" else "Save") { _, _ ->
+            .setPositiveButton("Save") { _, _ ->
                 pickupEt.setText(pEt.text.toString().trim())
                 dropEt.setText(dEt.text.toString().trim())
                 amountEt.setText(aEt.text.toString().trim())
@@ -878,12 +809,11 @@ class MainActivity : Activity() {
                 swScreenshot.isChecked = s4.isChecked
                 onSaved()
             }
-            .setNegativeButton(if (selectedLang == "HI") "बंद करें" else "Close", null)
+            .setNegativeButton("Close", null)
             .show()
     }
 
     private fun openRiderLinksAndQrDialog(ctx: Context) {
-        val scroll = ScrollView(ctx)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 24, 32, 20)
@@ -897,29 +827,13 @@ class MainActivity : Activity() {
         })
         box.addView(ImageView(ctx).apply {
             setImageBitmap(generateQrMatrix(customQrTitle))
-            layoutParams = LinearLayout.LayoutParams(320, 320).apply { bottomMargin = 14 }
+            layoutParams = LinearLayout.LayoutParams(300, 300).apply { bottomMargin = 12 }
         })
-        for ((name, url) in listOf("Facebook" to fbUrl, "Twitter" to twUrl, "YouTube" to ytUrl, "WhatsApp" to waUrl)) {
-            box.addView(Button(ctx).apply {
-                text = if (url.isNotBlank()) "$name • Open" else "$name • Not Set"
-                setOnClickListener {
-                    if (url.isNotBlank()) {
-                        try {
-                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                        } catch (_: Exception) {
-                            Toast.makeText(ctx, "Invalid Link", Toast.LENGTH_SHORT).show()
-                        }
-                    } else {
-                        Toast.makeText(ctx, "$name link not set", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            })
-        }
-        scroll.addView(box)
+        box.addView(buildCompactSocialLinksCard(ctx))
 
         AlertDialog.Builder(ctx)
-            .setTitle("🌐 QR & Links")
-            .setView(scroll)
+            .setTitle("QR & Links")
+            .setView(box)
             .setNegativeButton("Close", null)
             .show()
     }
@@ -927,7 +841,7 @@ class MainActivity : Activity() {
     private fun showLockScreen(ctx: Context, deviceId: String) {
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
-            setPadding(24, 72, 24, 32)
+            setPadding(24, 72, 24, 28)
         }
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
@@ -936,12 +850,12 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, 0, 0, 14)
         }
-        topRow.addView(makeStyledButton(ctx, "🛡️ Admin", accentBlue).apply {
+        topRow.addView(makeStyledButton(ctx, "Admin", accentBlue).apply {
             textSize = 11f
             setOnClickListener { promptAdminPassport(ctx, deviceId) }
         })
         topRow.addView(TextView(ctx).apply {
-            text = "  👑 Captain Smart Pro"
+            text = "  Captain Smart Pro"
             textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(accentGreenBright)
@@ -950,7 +864,7 @@ class MainActivity : Activity() {
 
         val card = makeCard(ctx, Color.parseColor("#1D1119"), accentRed)
         card.addView(TextView(ctx).apply {
-            text = if (selectedLang == "HI") "सब्सक्रिप्शन आवश्यक" else "Subscription Required"
+            text = "Subscription Required"
             textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -976,17 +890,17 @@ class MainActivity : Activity() {
         })
         qrCard.addView(ImageView(ctx).apply {
             setImageBitmap(generateQrMatrix(customQrTitle))
-            layoutParams = LinearLayout.LayoutParams(340, 340).apply {
+            layoutParams = LinearLayout.LayoutParams(320, 320).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
             }
         })
         col.addView(qrCard)
 
-        col.addView(makeStyledButton(ctx, "💬 Live Chat", accentPurple).apply {
+        col.addView(makeStyledButton(ctx, "Live Chat", accentPurple).apply {
             setOnClickListener { openRiderLiveChatDialog(ctx, deviceId) }
         })
-        col.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 14) })
-        col.addView(buildSocialLinksCard(ctx))
+        col.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 12) })
+        col.addView(buildCompactSocialLinksCard(ctx))
 
         scroll.addView(col)
         setContentView(scroll)
@@ -1017,7 +931,6 @@ class MainActivity : Activity() {
             setBackgroundColor(bgDark)
         }
 
-        // Top Bar: Admin button on left + Rider 3-dot menu on right
         val topBar = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(headerDark)
@@ -1026,7 +939,7 @@ class MainActivity : Activity() {
         }
 
         val leftAdminBtn = Button(ctx).apply {
-            text = "🛡️ Admin"
+            text = "ADMIN"
             textSize = 11f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -1042,13 +955,13 @@ class MainActivity : Activity() {
             }
         }
         brandCol.addView(TextView(ctx).apply {
-            text = "👑 Captain Smart Pro"
+            text = "Captain Smart Pro"
             textSize = 17f
             setTypeface(null, Typeface.BOLD)
             setTextColor(accentGreenBright)
         })
         brandCol.addView(TextView(ctx).apply {
-            text = if (selectedLang == "HI") "ऑटो क्लिकर • राइड कैचर ($selectedLang)" else "Auto Clicker • Ride Catcher ($selectedLang)"
+            text = "Auto Clicker • Ride Catcher ($selectedLang)"
             textSize = 11f
             setTextColor(textMuted)
         })
@@ -1099,7 +1012,7 @@ class MainActivity : Activity() {
         if (broadcastMessage.isNotBlank()) {
             val noticeCard = makeCard(ctx, cardElevated, accentGold)
             noticeCard.addView(TextView(ctx).apply {
-                text = "📢 $broadcastMessage"
+                text = "Notice: $broadcastMessage"
                 textSize = 12f
                 setTextColor(accentGold)
             })
@@ -1116,28 +1029,28 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         fleetLeft.addView(TextView(ctx).apply {
-            text = "🟡 Rapido / Ola / Uber"
+            text = "Rapido / Ola / Uber"
             textSize = 17f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
         })
         fleetLeft.addView(TextView(ctx).apply {
-            text = "📍 Dibrugarh Fleet Dispatcher"
+            text = "Dibrugarh Fleet Dispatcher"
             textSize = 12f
             setTextColor(Color.parseColor("#60A5FA"))
             setPadding(0, 4, 0, 4)
         })
         val fleetStateTv = TextView(ctx).apply {
-            text = if (selectedLang == "HI") "स्टैंडबाय (⋮ से चालू करें)" else "Standby (Open ⋮ to Activate)"
+            text = "Standby (Open ⋮ to Activate)"
             textSize = 12f
             setTextColor(Color.parseColor("#F87171"))
         }
         fleetLeft.addView(fleetStateTv)
 
-        val swOnlyOlaRapido = makeSwitchRow(ctx, "✓ Only Ola/Rapido", true)
-        val swSoundTts = makeSwitchRow(ctx, "🔊 Play Sound / TTS", true)
-        val swAutoAccept = makeSwitchRow(ctx, "⚡ Auto Accept", true)
-        val swScreenshot = makeSwitchRow(ctx, "📷 Screenshot Save to Gallery", true)
+        val swOnlyOlaRapido = makeSwitchRow(ctx, "Only Ola/Rapido", true)
+        val swSoundTts = makeSwitchRow(ctx, "Play Sound / TTS", true)
+        val swAutoAccept = makeSwitchRow(ctx, "Auto Accept", true)
+        val swScreenshot = makeSwitchRow(ctx, "Screenshot Save to Gallery", true)
 
         val pickupEt = makeStyledInput(ctx, pickupDef, "Pickup Km")
         val dropEt = makeStyledInput(ctx, dropDef, "Drop Km")
@@ -1164,25 +1077,21 @@ class MainActivity : Activity() {
             Toast.makeText(ctx, "Preferences Saved", Toast.LENGTH_SHORT).show()
         }
 
-        val autoAcceptBtn = makeStyledButton(ctx, "⚡\nAUTO ACCEPT\nOFF", Color.parseColor("#2A3954")).apply {
+        val autoAcceptBtn = makeStyledButton(ctx, "AUTO ACCEPT\nOFF", Color.parseColor("#2A3954")).apply {
             setOnClickListener {
                 if (!isEngineActivated) {
-                    Toast.makeText(
-                        ctx,
-                        if (selectedLang == "HI") "पहले ऊपर ⋮ दबाकर एक्टिवेट करें" else "Open ⋮ on top to Activate first",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(ctx, "Open ⋮ on top to Activate first", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 isAutoAcceptEnabled = !isAutoAcceptEnabled
                 if (isAutoAcceptEnabled) {
-                    text = "⚡\nAUTO ACCEPT\nON"
+                    text = "AUTO ACCEPT\nON"
                     background = makeRoundedBg(accentGreen, accentGreenBright, 14f)
                     fleetStateTv.text = "Active • 0.00s Auto Accept ON"
                     fleetStateTv.setTextColor(accentGreenBright)
                     speakText(ctx, swSoundTts.isChecked, "Auto Accept On")
                 } else {
-                    text = "⚡\nAUTO ACCEPT\nOFF"
+                    text = "AUTO ACCEPT\nOFF"
                     background = makeRoundedBg(Color.parseColor("#2A3954"), borderSlate, 14f)
                     fleetStateTv.text = "Activated • Auto Accept OFF"
                     fleetStateTv.setTextColor(accentGold)
@@ -1194,11 +1103,11 @@ class MainActivity : Activity() {
         riderDotsBtn.setOnClickListener {
             val popup = PopupMenu(ctx, riderDotsBtn)
             popup.menu.add(if (isEngineActivated) "Deactivate Engine" else "Activate Engine")
-            popup.menu.add("⚙️ Settings")
-            popup.menu.add("🌐 Language: Hindi / English")
-            popup.menu.add("💬 Live Chat")
-            popup.menu.add("🌐 QR & Links")
-            popup.menu.add("🛡️ Admin Panel")
+            popup.menu.add("Settings")
+            popup.menu.add("Language: Hindi / English")
+            popup.menu.add("Live Chat")
+            popup.menu.add("QR & Links")
+            popup.menu.add("Admin Panel")
             popup.setOnMenuItemClickListener { item ->
                 when (item.title.toString()) {
                     "Activate Engine", "Deactivate Engine" -> {
@@ -1210,7 +1119,7 @@ class MainActivity : Activity() {
                             Toast.makeText(ctx, "Engine Activated", Toast.LENGTH_SHORT).show()
                         } else {
                             isAutoAcceptEnabled = false
-                            autoAcceptBtn.text = "⚡\nAUTO ACCEPT\nOFF"
+                            autoAcceptBtn.text = "AUTO ACCEPT\nOFF"
                             autoAcceptBtn.background = makeRoundedBg(Color.parseColor("#2A3954"), borderSlate, 14f)
                             fleetStateTv.text = "Standby (Deactivated)"
                             fleetStateTv.setTextColor(Color.parseColor("#F87171"))
@@ -1218,17 +1127,17 @@ class MainActivity : Activity() {
                             Toast.makeText(ctx, "Engine Deactivated", Toast.LENGTH_SHORT).show()
                         }
                     }
-                    "⚙️ Settings" -> openRiderSettingsDialog(
+                    "Settings" -> openRiderSettingsDialog(
                         ctx, deviceId, pickupEt, dropEt, amountEt,
                         swOnlyOlaRapido, swSoundTts, swAutoAccept, swScreenshot, savePrefsAction
                     )
-                    "🌐 Language: Hindi / English" -> {
-                        toggleAppLanguage(ctx, deviceId)
-                        renderRiderScreen(ctx, deviceId, System.currentTimeMillis(), trialEndMillis - TimeUnit.DAYS.toMillis(configurableTrialDays), activeUntilMillis)
+                    "Language: Hindi / English" -> {
+                        toggleAppLanguage(ctx)
+                        loadLocalAndSyncSafe(ctx, deviceId)
                     }
-                    "💬 Live Chat" -> openRiderLiveChatDialog(ctx, deviceId)
-                    "🌐 QR & Links" -> openRiderLinksAndQrDialog(ctx)
-                    "🛡️ Admin Panel" -> promptAdminPassport(ctx, deviceId)
+                    "Live Chat" -> openRiderLiveChatDialog(ctx, deviceId)
+                    "QR & Links" -> openRiderLinksAndQrDialog(ctx)
+                    "Admin Panel" -> promptAdminPassport(ctx, deviceId)
                 }
                 true
             }
@@ -1248,7 +1157,7 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = 12 }
         }
-        row1.addView(makeStyledButton(ctx, "📷 TEST RIDE ACCEPT & SAVE", accentBlue).apply {
+        row1.addView(makeStyledButton(ctx, "TEST RIDE ACCEPT & SAVE", accentBlue).apply {
             textSize = 11f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 rightMargin = 6
@@ -1284,7 +1193,7 @@ class MainActivity : Activity() {
                 ).show()
             }
         })
-        row1.addView(makeStyledButton(ctx, "🔀 ORDER SPLIT FORM", accentPurple).apply {
+        row1.addView(makeStyledButton(ctx, "ORDER SPLIT FORM", accentPurple).apply {
             textSize = 11f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 leftMargin = 6
@@ -1298,7 +1207,7 @@ class MainActivity : Activity() {
 
         val rulesCard = makeCard(ctx, cardDark, borderSlate)
         rulesCard.addView(TextView(ctx).apply {
-            text = "⚙️ Rider Ride Rules (Pickup • Drop • Amount)"
+            text = "Rider Ride Rules (Pickup • Drop • Amount)"
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -1338,8 +1247,7 @@ class MainActivity : Activity() {
         })
         homeLayout.addView(rulesCard)
 
-        // Social Links Card right in the lower space (replaces cut-off bottom bar)
-        homeLayout.addView(buildSocialLinksCard(ctx))
+        homeLayout.addView(buildCompactSocialLinksCard(ctx))
 
         homeScroll.addView(homeLayout)
         frame.addView(homeScroll)
@@ -1515,6 +1423,6 @@ class MainActivity : Activity() {
                 bmp.setPixel(x, y, if (isDark) Color.BLACK else Color.WHITE)
             }
         }
-        return Bitmap.createScaledBitmap(bmp, 340, 340, false)
+        return Bitmap.createScaledBitmap(bmp, 320, 320, false)
     }
 }
