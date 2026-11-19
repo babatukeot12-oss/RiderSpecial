@@ -1,6 +1,7 @@
 package com.riderspecial.app
 
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -8,8 +9,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.view.Gravity
@@ -108,26 +111,53 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun captureScreenToGallery(ctx: Context, rootView: View): Boolean {
+    private fun saveScreenshotToGallery(ctx: Context, targetView: View): Boolean {
         return try {
-            val width = rootView.width
-            val height = rootView.height
-            if (width <= 0 || height <= 0) return false
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val w = targetView.width
+            val h = targetView.height
+            if (w <= 0 || h <= 0) return false
+
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
-            rootView.draw(canvas)
+            targetView.draw(canvas)
 
-            val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-            val folder = File(picturesDir, "CaptainSmartPro")
-            if (!folder.exists()) folder.mkdirs()
+            val fileName = "CaptainSmartPro_${System.currentTimeMillis()}.png"
 
-            val file = File(folder, "ride_accept_${System.currentTimeMillis()}.png")
-            FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 95, out)
-                out.flush()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(
+                        MediaStore.Images.Media.RELATIVE_PATH,
+                        Environment.DIRECTORY_PICTURES + "/CaptainSmartPro"
+                    )
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+                val uri = ctx.contentResolver.insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    values
+                ) ?: return false
+
+                ctx.contentResolver.openOutputStream(uri)?.use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 95, out)
+                    out.flush()
+                }
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                ctx.contentResolver.update(uri, values, null, null)
+                true
+            } else {
+                val picDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                val folder = File(picDir, "CaptainSmartPro")
+                if (!folder.exists()) folder.mkdirs()
+                val file = File(folder, fileName)
+                FileOutputStream(file).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.PNG, 95, out)
+                    out.flush()
+                }
+                ctx.sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)))
+                true
             }
-            ctx.sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(file)))
-            true
         } catch (_: Exception) {
             false
         }
@@ -139,9 +169,7 @@ class MainActivity : Activity() {
             setPadding(28, 96, 28, 56)
         }
 
-        val container = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-        }
+        val container = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
         val lockCard = makeCard(ctx, Color.parseColor("#1D1119"), accentRed)
         lockCard.addView(TextView(ctx).apply {
@@ -185,7 +213,7 @@ class MainActivity : Activity() {
         val upiUri =
             "upi://pay?pa=$upiId&pn=Captain%20Smart%20Pro&am=$planAmount&cu=INR&tn=Captain%20Smart%20Pro%2030%20Days"
 
-        container.addView(makeStyledButton(ctx, "Pay ₹$planAmount via UPI App (GPay / PhonePe / Navi / BHIM)", accentGreen).apply {
+        container.addView(makeStyledButton(ctx, "Pay ₹$planAmount via UPI App", accentGreen).apply {
             setOnClickListener {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(upiUri))
                 val chooser = Intent.createChooser(intent, "Pay ₹$planAmount using UPI App")
@@ -248,16 +276,19 @@ class MainActivity : Activity() {
         var totalRides = prefs.getInt("total_rides", 0)
         var totalDistance = prefs.getFloat("total_distance", 0f)
 
+        var isEngineActivated = false
+        var isAutoAcceptEnabled = false
+
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(bgDark)
         }
 
-        // Top Bar with safe top padding so status bar does not overlap title
+        // Top Bar with safe top padding and Activate/Deactivate state toggle
         val topBar = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(headerDark)
-            setPadding(24, 96, 24, 20)
+            setPadding(20, 96, 20, 20)
             gravity = Gravity.CENTER_VERTICAL
         }
 
@@ -267,7 +298,7 @@ class MainActivity : Activity() {
         }
         brandCol.addView(TextView(ctx).apply {
             text = "👑 Captain Smart Pro"
-            textSize = 19f
+            textSize = 18f
             setTextColor(Color.parseColor("#22C55E"))
         })
         brandCol.addView(TextView(ctx).apply {
@@ -276,28 +307,24 @@ class MainActivity : Activity() {
             setTextColor(textMuted)
         })
 
-        val badgeText = if (hasActiveSubscription) {
+        val planTag = if (hasActiveSubscription) {
             val daysLeft = TimeUnit.MILLISECONDS.toDays(activeUntilMillis - nowMillis).coerceAtLeast(0L)
-            "30D PLAN • ${daysLeft}d"
+            "30D•${daysLeft}d"
         } else {
             val hoursLeft = TimeUnit.MILLISECONDS.toHours(trialEndMillis - nowMillis).coerceAtLeast(0L)
-            "TRIAL • ${hoursLeft}h"
+            "TRIAL•${hoursLeft}h"
         }
 
-        val badgeTv = TextView(ctx).apply {
-            text = badgeText
-            textSize = 11f
+        val activateToggleBtn = Button(ctx).apply {
+            text = "DEACTIVATED\n($planTag)"
+            textSize = 10f
             setTextColor(Color.WHITE)
-            background = makeRoundedBg(
-                if (hasActiveSubscription) accentGreen else accentRed,
-                if (hasActiveSubscription) accentGreen else accentRed,
-                14f
-            )
-            setPadding(18, 10, 18, 10)
+            background = makeRoundedBg(accentRed, accentRed, 14f)
+            setPadding(16, 10, 16, 10)
         }
 
         topBar.addView(brandCol)
-        topBar.addView(badgeTv)
+        topBar.addView(activateToggleBtn)
         root.addView(topBar)
 
         val contentFrame = FrameLayout(ctx).apply {
@@ -352,16 +379,57 @@ class MainActivity : Activity() {
             setTextColor(textMuted)
         }
 
-        val autoAcceptToggleBtn = makeStyledButton(ctx, "⚡\nAuto Accept\nON", accentGreen).apply {
+        val autoAcceptActionBtn = makeStyledButton(ctx, "⚡\nAuto Accept\nOFF", Color.parseColor("#334155")).apply {
             setOnClickListener {
-                fleetStateTv.text = "Active • 0.00s Radar ($deviceId)"
-                fleetStateTv.setTextColor(Color.parseColor("#4ADE80"))
-                speakAudio(ctx, swSoundTts.isChecked, "Captain Smart Pro Auto Accept Active")
-                Toast.makeText(ctx, "Auto Accept ON", Toast.LENGTH_SHORT).show()
+                if (!isEngineActivated) {
+                    Toast.makeText(
+                        ctx,
+                        "Pehle upar DEACTIVATED dabakar Activate karein",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@setOnClickListener
+                }
+                isAutoAcceptEnabled = !isAutoAcceptEnabled
+                if (isAutoAcceptEnabled) {
+                    text = "⚡\nAuto Accept\nON"
+                    background = makeRoundedBg(accentGreen, accentGreen, 16f)
+                    fleetStateTv.text = "Active • 0.00s Auto Accept ON ($deviceId)"
+                    fleetStateTv.setTextColor(Color.parseColor("#4ADE80"))
+                    speakAudio(ctx, swSoundTts.isChecked, "Auto Accept On")
+                } else {
+                    text = "⚡\nAuto Accept\nOFF"
+                    background = makeRoundedBg(Color.parseColor("#334155"), borderSlate, 16f)
+                    fleetStateTv.text = "Activated • Auto Accept OFF"
+                    fleetStateTv.setTextColor(accentGold)
+                    speakAudio(ctx, swSoundTts.isChecked, "Auto Accept Off")
+                }
             }
         }
+
+        activateToggleBtn.setOnClickListener {
+            isEngineActivated = !isEngineActivated
+            if (isEngineActivated) {
+                activateToggleBtn.text = "ACTIVATED\n($planTag)"
+                activateToggleBtn.background = makeRoundedBg(accentGreen, accentGreen, 14f)
+                fleetStateTv.text = "Activated • Ready for Auto Accept"
+                fleetStateTv.setTextColor(accentGold)
+                speakAudio(ctx, swSoundTts.isChecked, "Captain Smart Pro Activated")
+                Toast.makeText(ctx, "Activated! Ab Auto Accept button dabakar ON karein.", Toast.LENGTH_SHORT).show()
+            } else {
+                isAutoAcceptEnabled = false
+                activateToggleBtn.text = "DEACTIVATED\n($planTag)"
+                activateToggleBtn.background = makeRoundedBg(accentRed, accentRed, 14f)
+                autoAcceptActionBtn.text = "⚡\nAuto Accept\nOFF"
+                autoAcceptActionBtn.background = makeRoundedBg(Color.parseColor("#334155"), borderSlate, 16f)
+                fleetStateTv.text = "Paused (Deactivated)"
+                fleetStateTv.setTextColor(Color.parseColor("#F87171"))
+                speakAudio(ctx, swSoundTts.isChecked, "Deactivated")
+                Toast.makeText(ctx, "Deactivated", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         fleetRow.addView(fleetLeft)
-        fleetRow.addView(autoAcceptToggleBtn)
+        fleetRow.addView(autoAcceptActionBtn)
         fleetCard.addView(fleetRow)
         homeLayout.addView(fleetCard)
 
@@ -392,12 +460,13 @@ class MainActivity : Activity() {
                 historyBodyTv.text =
                     "Completed Ride #$totalRides • ₹25 • 2.4 Km (Saved)"
 
-                val savedShot = if (swScreenshot.isChecked) captureScreenToGallery(ctx, root) else false
+                val saved = if (swScreenshot.isChecked) saveScreenshotToGallery(ctx, root) else false
                 speakAudio(ctx, swSoundTts.isChecked, "Ride Accepted")
                 Toast.makeText(
                     ctx,
-                    if (savedShot) "Ride Accepted & Screenshot Saved" else "Ride Accepted & Saved",
-                    Toast.LENGTH_SHORT
+                    if (saved) "Ride Accepted & Screenshot Saved in Pictures/CaptainSmartPro"
+                    else "Ride Accepted & Saved",
+                    Toast.LENGTH_LONG
                 ).show()
             }
         })
@@ -572,7 +641,7 @@ class MainActivity : Activity() {
                                 if (totalRides > 0) "Completed Rides: $totalRides • Total Earned: ₹$totalEarnings"
                                 else "Completed Ride History\nNo rides captured yet. Use 'Test Ride Accept & Save' on Home."
                             label.contains("Help") ->
-                                "Support & Help Center\n1. Tap Auto Accept on top to ready the 0.00s radar.\n2. Set Max Pickup and Min Price filters.\n3. 3-day free trial, then ₹$planAmount for $subscriptionDays days to $upiId."
+                                "Support & Help Center\n1. Tap DEACTIVATED on top to Activate.\n2. Tap Auto Accept to turn ON.\n3. 3-day free trial, then ₹$planAmount for $subscriptionDays days to $upiId."
                             else ->
                                 "Captain Smart Pro v2.5\nDibrugarh Fleet & Auto-Clicker Edition\nDesigned for Rapido, Ola, and Uber Captains."
                         }
