@@ -1,5 +1,6 @@
 package com.riderspecial.app
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -24,8 +25,7 @@ class MainActivity : AppCompatActivity() {
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown_device"
         val nowMillis = System.currentTimeMillis()
 
-        // Online backend/Firebase subscription record placeholder for this deviceId
-        checkOnlineSubscriptionState(deviceId, nowMillis) { trialStartMillis, activeUntilMillis ->
+        checkOnlineSubscriptionState(this@MainActivity, deviceId, nowMillis) { trialStartMillis, activeUntilMillis ->
             val effectiveTrialStart = if (trialStartMillis > 0L) trialStartMillis else nowMillis
             val trialEndMillis = effectiveTrialStart + TimeUnit.DAYS.toMillis(trialDays)
 
@@ -44,13 +44,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkOnlineSubscriptionState(
+        context: Context,
         deviceId: String,
         nowMillis: Long,
         onResult: (trialStartMillis: Long, activeUntilMillis: Long) -> Unit
     ) {
-        // Connect this method to your online database (Firebase) using `deviceId`
-        // so trial start & 30-day active expiry survive Clear Data and Uninstall/Reinstall.
-        val prefs = getSharedPreferences("captain_smart_pro_cache", MODE_PRIVATE)
+        val prefs = context.getSharedPreferences("captain_smart_pro_cache", Context.MODE_PRIVATE)
         var trialStart = prefs.getLong("trial_start_$deviceId", 0L)
         if (trialStart == 0L) {
             trialStart = nowMillis
@@ -68,12 +67,12 @@ class MainActivity : AppCompatActivity() {
         hasActivePaidPlan: Boolean,
         isInFreeTrial: Boolean
     ) {
-        val layout = LinearLayout(this).apply {
+        val layout = LinearLayout(this@MainActivity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 64, 48, 48)
         }
 
-        val titleView = TextView(this).apply {
+        val titleView = TextView(this@MainActivity).apply {
             text = "Captain Smart Pro"
             textSize = 24f
         }
@@ -92,13 +91,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val statusView = TextView(this).apply {
+        val statusView = TextView(this@MainActivity).apply {
             text = infoText
             textSize = 16f
             setPadding(0, 24, 0, 32)
         }
 
-        val payButton = Button(this).apply {
+        val payButton = Button(this@MainActivity).apply {
             text = "Pay ₹$planAmount for $subscriptionDays Days ($upiId)"
             setOnClickListener {
                 val uri = Uri.parse(
@@ -106,8 +105,8 @@ class MainActivity : AppCompatActivity() {
                 )
                 val intent = Intent(Intent.ACTION_VIEW, uri)
                 val chooser = Intent.createChooser(intent, "Choose UPI App")
-                if (intent.resolveActivity(packageManager) != null) {
-                    startActivity(chooser)
+                if (intent.resolveActivity(this@MainActivity.packageManager) != null) {
+                    this@MainActivity.startActivity(chooser)
                 } else {
                     Toast.makeText(
                         this@MainActivity,
@@ -124,6 +123,6 @@ class MainActivity : AppCompatActivity() {
             layout.addView(payButton)
         }
 
-        setContentView(layout)
+        this@MainActivity.setContentView(layout)
     }
 }
