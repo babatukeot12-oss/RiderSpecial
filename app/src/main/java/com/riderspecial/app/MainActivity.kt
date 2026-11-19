@@ -809,10 +809,10 @@ class MainActivity : Activity() {
                             val text = item.child("message").getValue(String::class.java) ?: ""
                             val photoB64 = item.child("photoB64").getValue(String::class.java) ?: ""
                             if (text.isNotBlank()) {
-                                messagesBox.addView(TextView(ctx).apply {
-                                    text = "$sender: $text"
-                                    textSize = 12f
-                                })
+                                val msgTv = TextView(ctx)
+                                msgTv.text = "$sender: $text"
+                                msgTv.textSize = 12f
+                                messagesBox.addView(msgTv)
                             }
                             val bmp = decodeBase64Bitmap(photoB64)
                             if (bmp != null) {
