@@ -23,7 +23,6 @@ import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -47,12 +46,12 @@ class MainActivity : Activity() {
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var selectedLang = "EN" // "EN" or "HI"
 
     private var fbUrl = ""
     private var twUrl = ""
     private var ytUrl = ""
     private var waUrl = ""
-    private var otherUrl = ""
     private var broadcastMessage = ""
     private var customQrTitle = "Rider Payment QR"
 
@@ -67,7 +66,6 @@ class MainActivity : Activity() {
     private val accentPurple = Color.parseColor("#7C3AED")
     private val accentRed = Color.parseColor("#DC2626")
     private val accentGold = Color.parseColor("#FACC15")
-    private val accentOrange = Color.parseColor("#EA580C")
     private val accentTeal = Color.parseColor("#0284C7")
     private val textWhite = Color.parseColor("#F8FAFC")
     private val textMuted = Color.parseColor("#94A3B8")
@@ -76,9 +74,12 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val ctx: Context = this
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
+        selectedLang = prefs.getString("app_lang", "EN") ?: "EN"
+
         tts = TextToSpeech(ctx) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale("hi", "IN")
+                applyTtsLanguage()
                 ttsReady = true
             }
         }
@@ -87,6 +88,10 @@ class MainActivity : Activity() {
             ?: "unknown_device"
 
         loadStateAndSync(ctx, deviceId)
+    }
+
+    private fun applyTtsLanguage() {
+        tts?.language = if (selectedLang == "HI") Locale("hi", "IN") else Locale.US
     }
 
     private fun loadStateAndSync(ctx: Context, deviceId: String) {
@@ -98,7 +103,6 @@ class MainActivity : Activity() {
         twUrl = prefs.getString("social_tw", "") ?: ""
         ytUrl = prefs.getString("social_yt", "") ?: ""
         waUrl = prefs.getString("social_wa", "") ?: ""
-        otherUrl = prefs.getString("social_other", "") ?: ""
         broadcastMessage = prefs.getString("broadcast_msg", "") ?: ""
         customQrTitle = prefs.getString("custom_qr_title", "Rider Payment QR") ?: "Rider Payment QR"
 
@@ -125,7 +129,6 @@ class MainActivity : Activity() {
                     twUrl = snap.child("twitter").getValue(String::class.java) ?: twUrl
                     ytUrl = snap.child("youtube").getValue(String::class.java) ?: ytUrl
                     waUrl = snap.child("whatsapp").getValue(String::class.java) ?: waUrl
-                    otherUrl = snap.child("others").getValue(String::class.java) ?: otherUrl
                     broadcastMessage = snap.child("broadcast").getValue(String::class.java) ?: broadcastMessage
                     customQrTitle = snap.child("qrTitle").getValue(String::class.java) ?: customQrTitle
 
@@ -134,7 +137,6 @@ class MainActivity : Activity() {
                         .putString("social_tw", twUrl)
                         .putString("social_yt", ytUrl)
                         .putString("social_wa", waUrl)
-                        .putString("social_other", otherUrl)
                         .putString("broadcast_msg", broadcastMessage)
                         .putString("custom_qr_title", customQrTitle)
                         .apply()
@@ -222,21 +224,25 @@ class MainActivity : Activity() {
 
     private fun promptAdminPassport(ctx: Context, currentDeviceId: String) {
         val passEt = EditText(ctx).apply {
-            hint = "Admin Passport"
+            hint = if (selectedLang == "HI") "एडमिन पासवर्ड डालें" else "Enter Admin Passport"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setPadding(32, 24, 32, 24)
+            setPadding(28, 20, 28, 20)
         }
         AlertDialog.Builder(ctx)
-            .setTitle("Admin Login")
+            .setTitle(if (selectedLang == "HI") "एडमिन लॉगिन" else "Admin Login")
             .setView(passEt)
-            .setPositiveButton("Unlock") { _, _ ->
+            .setPositiveButton(if (selectedLang == "HI") "खोलें" else "Unlock") { _, _ ->
                 if (passEt.text.toString() == adminPassport) {
                     showAdminDashboardScreen(ctx, currentDeviceId)
                 } else {
-                    Toast.makeText(ctx, "Invalid Passport", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        ctx,
+                        if (selectedLang == "HI") "गलत पासवर्ड" else "Invalid Passport",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(if (selectedLang == "HI") "रद्द करें" else "Cancel", null)
             .show()
     }
 
@@ -251,7 +257,7 @@ class MainActivity : Activity() {
             setBackgroundColor(bgDark)
         }
 
-        // Top Bar matching 1000206170.png with Admin badge + 3-dot menu on right
+        // Top Bar: Admin badge on left + 3-dot menu on right
         val topBar = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(headerDark)
@@ -259,13 +265,27 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
 
+        val adminLeftBtn = Button(ctx).apply {
+            text = "🛡️ Admin"
+            textSize = 12f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            background = makeRoundedBg(accentBlue, accentBlue, 14f)
+            setPadding(14, 8, 14, 8)
+            setOnClickListener {
+                Toast.makeText(ctx, "Admin Active • Device: $currentDeviceId", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         val brandCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                leftMargin = 10
+            }
         }
         brandCol.addView(TextView(ctx).apply {
             text = "👑 Captain Smart Pro"
-            textSize = 19f
+            textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(accentGreenBright)
         })
@@ -275,15 +295,6 @@ class MainActivity : Activity() {
             setTextColor(textMuted)
         })
 
-        val adminBadgeTv = TextView(ctx).apply {
-            text = "🛡️ Admin"
-            textSize = 12f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            background = makeRoundedBg(accentBlue, accentBlue, 14f)
-            setPadding(14, 8, 14, 8)
-        }
-
         val adminDotsBtn = Button(ctx).apply {
             text = "⋮"
             textSize = 18f
@@ -291,14 +302,10 @@ class MainActivity : Activity() {
             setTextColor(textWhite)
             background = makeRoundedBg(cardElevated, borderSlate, 14f)
             setPadding(14, 6, 14, 6)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { leftMargin = 8 }
         }
 
+        topBar.addView(adminLeftBtn)
         topBar.addView(brandCol)
-        topBar.addView(adminBadgeTv)
         topBar.addView(adminDotsBtn)
         root.addView(topBar)
 
@@ -308,7 +315,6 @@ class MainActivity : Activity() {
         }
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
-        // Top 3 Metric Cards
         val top3Row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -321,7 +327,6 @@ class MainActivity : Activity() {
         top3Row.addView(makeMetricCard(ctx, "Offline Riders", "0", "0%", Color.parseColor("#3B1219"), accentRed, 0))
         col.addView(top3Row)
 
-        // Middle 2 Metric Cards
         val mid2Row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -333,14 +338,13 @@ class MainActivity : Activity() {
         mid2Row.addView(makeMetricCard(ctx, "Total Rides", "$totalRides", "Trips", Color.parseColor("#0D2E47"), accentTeal, 0))
         col.addView(mid2Row)
 
-        // Today's Summary Card
         val summaryCard = makeCard(ctx, cardDark, borderSlate)
         summaryCard.addView(TextView(ctx).apply {
             text = "📅 Today's Summary"
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
-            setPadding(0, 0, 0, 10)
+            setPadding(0, 0, 0, 8)
         })
         summaryCard.addView(TextView(ctx).apply {
             text = "Rides: $totalRides   |   Earnings: ₹$totalEarnings   |   Distance: ${String.format(Locale.US, "%.1f", totalDistance)} Km"
@@ -349,7 +353,6 @@ class MainActivity : Activity() {
         })
         col.addView(summaryCard)
 
-        // Send Message to All Riders Card
         val msgCard = makeCard(ctx, cardDark, borderSlate)
         msgCard.addView(TextView(ctx).apply {
             text = "✈️ Send Message to All Riders"
@@ -400,7 +403,6 @@ class MainActivity : Activity() {
         msgCard.addView(msgBtnRow)
         col.addView(msgCard)
 
-        // Rider Status Details Card
         val statusCard = makeCard(ctx, cardDark, borderSlate)
         statusCard.addView(TextView(ctx).apply {
             text = "👥 Rider Status Details"
@@ -416,32 +418,27 @@ class MainActivity : Activity() {
         })
         col.addView(statusCard)
 
-        // Admin 3-Dot Menu containing all management, subscription, trial, links, QR, chat, call, reports & back to rider
+        col.addView(buildSocialLinksCard(ctx))
+
+        // Admin 3-Dot Menu with all management controls
         adminDotsBtn.setOnClickListener {
             val popup = PopupMenu(ctx, adminDotsBtn)
-            popup.menu.add("📅 Manage Subscription Days (+/-)")
-            popup.menu.add("⏳ Manage Free Trial Days (+/-)")
-            popup.menu.add("💬 Direct Chat / Call Rider")
-            popup.menu.add("🌐 QR Code & Social Links")
-            popup.menu.add("📊 View Reports")
-            popup.menu.add("🔔 Send Notification")
+            popup.menu.add("📅 Subscription Days (+/-)")
+            popup.menu.add("⏳ Free Trial Days (+/-)")
+            popup.menu.add("💬 Live Chat / Call Rider")
+            popup.menu.add("🌐 QR & Social Links")
+            popup.menu.add("🌐 Language: Hindi / English")
             popup.menu.add("⚙️ Admin Settings")
             popup.menu.add("🛵 Back to Rider Panel")
             popup.setOnMenuItemClickListener { item ->
                 when (item.title.toString()) {
-                    "📅 Manage Subscription Days (+/-)" -> openSubscriptionManagerDialog(ctx, currentDeviceId)
-                    "⏳ Manage Free Trial Days (+/-)" -> openTrialManagerDialog(ctx, currentDeviceId)
-                    "💬 Direct Chat / Call Rider" -> openDirectChatOrCallDialog(ctx, currentDeviceId)
-                    "🌐 QR Code & Social Links" -> openAdminLinksAndQrDialog(ctx)
-                    "📊 View Reports" -> Toast.makeText(
-                        ctx,
-                        "Reports: Rides $totalRides | Earnings ₹$totalEarnings | Distance ${String.format(Locale.US, "%.1f", totalDistance)} Km",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    "🔔 Send Notification" -> {
-                        val nText = broadcastInputEt.text.toString().trim().ifEmpty { "Captain Smart Pro Admin Alert" }
-                        speakText(ctx, true, nText)
-                        Toast.makeText(ctx, "Notification Sent", Toast.LENGTH_SHORT).show()
+                    "📅 Subscription Days (+/-)" -> openSubscriptionManagerDialog(ctx, currentDeviceId)
+                    "⏳ Free Trial Days (+/-)" -> openTrialManagerDialog(ctx, currentDeviceId)
+                    "💬 Live Chat / Call Rider" -> openDirectChatOrCallDialog(ctx, currentDeviceId)
+                    "🌐 QR & Social Links" -> openAdminLinksAndQrDialog(ctx)
+                    "🌐 Language: Hindi / English" -> {
+                        toggleAppLanguage(ctx, currentDeviceId)
+                        showAdminDashboardScreen(ctx, currentDeviceId)
                     }
                     "⚙️ Admin Settings" -> Toast.makeText(ctx, "Device ID: $currentDeviceId", Toast.LENGTH_LONG).show()
                     "🛵 Back to Rider Panel" -> loadStateAndSync(ctx, currentDeviceId)
@@ -454,6 +451,60 @@ class MainActivity : Activity() {
         scroll.addView(col)
         root.addView(scroll)
         setContentView(root)
+    }
+
+    private fun toggleAppLanguage(ctx: Context, currentDeviceId: String) {
+        selectedLang = if (selectedLang == "EN") "HI" else "EN"
+        applyTtsLanguage()
+        ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
+            .edit()
+            .putString("app_lang", selectedLang)
+            .apply()
+        val label = if (selectedLang == "HI") "भाषा: हिन्दी (Hindi)" else "Language: English"
+        Toast.makeText(ctx, label, Toast.LENGTH_SHORT).show()
+        speakText(ctx, true, if (selectedLang == "HI") "हिन्दी भाषा चुनी गई" else "English language selected")
+    }
+
+    private fun buildSocialLinksCard(ctx: Context): LinearLayout {
+        val linksCard = makeCard(ctx, cardDark, borderSlate)
+        linksCard.addView(TextView(ctx).apply {
+            text = if (selectedLang == "HI") "🌐 सोशल लिंक (Facebook • Twitter • YouTube • WhatsApp)" else "🌐 Social Links (Facebook • Twitter • YouTube • WhatsApp)"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(textWhite)
+            setPadding(0, 0, 0, 10)
+        })
+        val links = listOf(
+            "Facebook" to fbUrl,
+            "Twitter" to twUrl,
+            "YouTube" to ytUrl,
+            "WhatsApp" to waUrl
+        )
+        for ((name, url) in links) {
+            linksCard.addView(Button(ctx).apply {
+                text = if (url.isNotBlank()) "$name • Open Link" else "$name • Not Set"
+                textSize = 12f
+                setTextColor(if (url.isNotBlank()) textWhite else textMuted)
+                background = makeRoundedBg(cardElevated, borderSlate, 12f)
+                setPadding(14, 10, 14, 10)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = 8 }
+                setOnClickListener {
+                    if (url.isNotBlank()) {
+                        try {
+                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        } catch (_: Exception) {
+                            Toast.makeText(ctx, "Invalid Link", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Toast.makeText(ctx, "$name link not set yet", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            })
+        }
+        return linksCard
     }
 
     private fun openSubscriptionManagerDialog(ctx: Context, defaultDevId: String) {
@@ -473,7 +524,7 @@ class MainActivity : Activity() {
         }
         box.addView(TextView(ctx).apply { text = "Rider Device ID:" })
         box.addView(devEt)
-        box.addView(TextView(ctx).apply { text = "Subscription Days (Increase / Free Days / Reduce):" })
+        box.addView(TextView(ctx).apply { text = "Subscription Days:" })
         box.addView(daysEt)
 
         AlertDialog.Builder(ctx)
@@ -639,17 +690,12 @@ class MainActivity : Activity() {
             hint = "WhatsApp Link"
             setText(waUrl)
         }
-        val otherEt = EditText(ctx).apply {
-            hint = "Others Link"
-            setText(otherUrl)
-        }
 
         box.addView(qrEt)
         box.addView(fbEt)
         box.addView(twEt)
         box.addView(ytEt)
         box.addView(waEt)
-        box.addView(otherEt)
         box.addView(Button(ctx).apply {
             text = "Save QR & Social Links"
             setOnClickListener {
@@ -658,7 +704,6 @@ class MainActivity : Activity() {
                 twUrl = twEt.text.toString().trim()
                 ytUrl = ytEt.text.toString().trim()
                 waUrl = waEt.text.toString().trim()
-                otherUrl = otherEt.text.toString().trim()
 
                 prefs.edit()
                     .putString("custom_qr_title", customQrTitle)
@@ -666,7 +711,6 @@ class MainActivity : Activity() {
                     .putString("social_tw", twUrl)
                     .putString("social_yt", ytUrl)
                     .putString("social_wa", waUrl)
-                    .putString("social_other", otherUrl)
                     .apply()
 
                 try {
@@ -679,8 +723,7 @@ class MainActivity : Activity() {
                                 "facebook" to fbUrl,
                                 "twitter" to twUrl,
                                 "youtube" to ytUrl,
-                                "whatsapp" to waUrl,
-                                "others" to otherUrl
+                                "whatsapp" to waUrl
                             )
                         )
                 } catch (_: Exception) {
@@ -708,8 +751,12 @@ class MainActivity : Activity() {
             textSize = 13f
             setPadding(0, 0, 0, 12)
         }
-        val msgEt = EditText(ctx).apply { hint = "Type message..." }
-        val sendBtn = Button(ctx).apply { text = "Send" }
+        val msgEt = EditText(ctx).apply {
+            hint = if (selectedLang == "HI") "संदेश लिखें..." else "Type message..."
+        }
+        val sendBtn = Button(ctx).apply {
+            text = if (selectedLang == "HI") "भेजें" else "Send"
+        }
 
         val chatRef = FirebaseDatabase.getInstance().reference
             .child("captain_smart_pro")
@@ -750,22 +797,25 @@ class MainActivity : Activity() {
         scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle("💬 Live Chat")
+            .setTitle(if (selectedLang == "HI") "💬 लाइव चैट" else "💬 Live Chat")
             .setView(scroll)
-            .setNegativeButton("Close", null)
+            .setNegativeButton(if (selectedLang == "HI") "बंद करें" else "Close", null)
             .show()
     }
 
-    private fun openRiderCustomizeDialog(
+    private fun openRiderSettingsDialog(
         ctx: Context,
-        prefs: android.content.SharedPreferences,
+        deviceId: String,
         pickupEt: EditText,
         dropEt: EditText,
         amountEt: EditText,
-        swSound: Switch,
-        swShot: Switch,
-        onDone: () -> Unit
+        swOnlyOlaRapido: Switch,
+        swSoundTts: Switch,
+        swAutoAccept: Switch,
+        swScreenshot: Switch,
+        onSaved: () -> Unit
     ) {
+        val scroll = ScrollView(ctx)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 24, 32, 20)
@@ -782,41 +832,53 @@ class MainActivity : Activity() {
             hint = "Ride Amount / Fare (₹)"
             setText(amountEt.text.toString())
         }
-        val sSw = Switch(ctx).apply {
-            text = "Voice / TTS Notification"
-            isChecked = swSound.isChecked
+        val s1 = Switch(ctx).apply {
+            text = "Only Ola/Rapido"
+            isChecked = swOnlyOlaRapido.isChecked
         }
-        val shotSw = Switch(ctx).apply {
+        val s2 = Switch(ctx).apply {
+            text = "Play Sound / TTS"
+            isChecked = swSoundTts.isChecked
+        }
+        val s3 = Switch(ctx).apply {
+            text = "Auto Accept"
+            isChecked = swAutoAccept.isChecked
+        }
+        val s4 = Switch(ctx).apply {
             text = "Screenshot Save to Gallery"
-            isChecked = swShot.isChecked
+            isChecked = swScreenshot.isChecked
         }
 
-        box.addView(TextView(ctx).apply { text = "Pickup Distance (Km):" })
+        box.addView(TextView(ctx).apply { text = "Pickup (Km):" })
         box.addView(pEt)
-        box.addView(TextView(ctx).apply { text = "Drop Distance (Km):" })
+        box.addView(TextView(ctx).apply { text = "Drop (Km):" })
         box.addView(dEt)
-        box.addView(TextView(ctx).apply { text = "Ride Amount / Fare (₹):" })
+        box.addView(TextView(ctx).apply { text = "Ride Amount (₹):" })
         box.addView(aEt)
-        box.addView(sSw)
-        box.addView(shotSw)
+        box.addView(s1)
+        box.addView(s2)
+        box.addView(s3)
+        box.addView(s4)
+        box.addView(TextView(ctx).apply {
+            text = "\nDevice ID: $deviceId"
+            textSize = 12f
+        })
+        scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle("🎨 Customize Rider App")
-            .setView(box)
-            .setPositiveButton("Save") { _, _ ->
+            .setTitle(if (selectedLang == "HI") "⚙️ राइडर सेटिंग्स" else "⚙️ Rider Settings")
+            .setView(scroll)
+            .setPositiveButton(if (selectedLang == "HI") "सेव करें" else "Save") { _, _ ->
                 pickupEt.setText(pEt.text.toString().trim())
                 dropEt.setText(dEt.text.toString().trim())
                 amountEt.setText(aEt.text.toString().trim())
-                swSound.isChecked = sSw.isChecked
-                swShot.isChecked = shotSw.isChecked
-                prefs.edit()
-                    .putString("pickup_km", pickupEt.text.toString().trim())
-                    .putString("drop_km", dropEt.text.toString().trim())
-                    .putString("fare_rs", amountEt.text.toString().trim())
-                    .apply()
-                onDone()
+                swOnlyOlaRapido.isChecked = s1.isChecked
+                swSoundTts.isChecked = s2.isChecked
+                swAutoAccept.isChecked = s3.isChecked
+                swScreenshot.isChecked = s4.isChecked
+                onSaved()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(if (selectedLang == "HI") "बंद करें" else "Close", null)
             .show()
     }
 
@@ -837,15 +899,7 @@ class MainActivity : Activity() {
             setImageBitmap(generateQrMatrix(customQrTitle))
             layoutParams = LinearLayout.LayoutParams(320, 320).apply { bottomMargin = 14 }
         })
-
-        val links = listOf(
-            "Facebook" to fbUrl,
-            "Twitter" to twUrl,
-            "YouTube" to ytUrl,
-            "WhatsApp" to waUrl,
-            "Others" to otherUrl
-        )
-        for ((name, url) in links) {
+        for ((name, url) in listOf("Facebook" to fbUrl, "Twitter" to twUrl, "YouTube" to ytUrl, "WhatsApp" to waUrl)) {
             box.addView(Button(ctx).apply {
                 text = if (url.isNotBlank()) "$name • Open" else "$name • Not Set"
                 setOnClickListener {
@@ -864,7 +918,7 @@ class MainActivity : Activity() {
         scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle("🌐 QR & Social Links")
+            .setTitle("🌐 QR & Links")
             .setView(scroll)
             .setNegativeButton("Close", null)
             .show()
@@ -873,22 +927,39 @@ class MainActivity : Activity() {
     private fun showLockScreen(ctx: Context, deviceId: String) {
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
-            setPadding(28, 96, 28, 56)
+            setPadding(24, 72, 24, 32)
         }
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
+        val topRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, 14)
+        }
+        topRow.addView(makeStyledButton(ctx, "🛡️ Admin", accentBlue).apply {
+            textSize = 11f
+            setOnClickListener { promptAdminPassport(ctx, deviceId) }
+        })
+        topRow.addView(TextView(ctx).apply {
+            text = "  👑 Captain Smart Pro"
+            textSize = 18f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(accentGreenBright)
+        })
+        col.addView(topRow)
+
         val card = makeCard(ctx, Color.parseColor("#1D1119"), accentRed)
         card.addView(TextView(ctx).apply {
-            text = "👑 Captain Smart Pro"
-            textSize = 20f
+            text = if (selectedLang == "HI") "सब्सक्रिप्शन आवश्यक" else "Subscription Required"
+            textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
         })
         card.addView(TextView(ctx).apply {
-            text = "Subscription Required • Device ID: $deviceId"
-            textSize = 13f
+            text = "Device ID: $deviceId"
+            textSize = 12f
             setTextColor(textMuted)
-            setPadding(0, 8, 0, 0)
+            setPadding(0, 6, 0, 0)
         })
         col.addView(card)
 
@@ -901,23 +972,21 @@ class MainActivity : Activity() {
             setTypeface(null, Typeface.BOLD)
             setTextColor(accentGold)
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 12)
+            setPadding(0, 0, 0, 10)
         })
         qrCard.addView(ImageView(ctx).apply {
             setImageBitmap(generateQrMatrix(customQrTitle))
-            layoutParams = LinearLayout.LayoutParams(360, 360).apply {
+            layoutParams = LinearLayout.LayoutParams(340, 340).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
             }
         })
         col.addView(qrCard)
 
-        col.addView(makeStyledButton(ctx, "💬 Live Chat", accentBlue).apply {
+        col.addView(makeStyledButton(ctx, "💬 Live Chat", accentPurple).apply {
             setOnClickListener { openRiderLiveChatDialog(ctx, deviceId) }
         })
-        col.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 12) })
-        col.addView(makeStyledButton(ctx, "⋮ Admin / More", accentPurple).apply {
-            setOnClickListener { promptAdminPassport(ctx, deviceId) }
-        })
+        col.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 14) })
+        col.addView(buildSocialLinksCard(ctx))
 
         scroll.addView(col)
         setContentView(scroll)
@@ -948,79 +1017,89 @@ class MainActivity : Activity() {
             setBackgroundColor(bgDark)
         }
 
+        // Top Bar: Admin button on left + Rider 3-dot menu on right
         val topBar = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(headerDark)
-            setPadding(18, 72, 18, 16)
+            setPadding(16, 72, 16, 16)
             gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val leftAdminBtn = Button(ctx).apply {
+            text = "🛡️ Admin"
+            textSize = 11f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            background = makeRoundedBg(cardElevated, borderSlate, 12f)
+            setPadding(12, 8, 12, 8)
+            setOnClickListener { promptAdminPassport(ctx, deviceId) }
         }
 
         val brandCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                leftMargin = 8
+            }
         }
         brandCol.addView(TextView(ctx).apply {
             text = "👑 Captain Smart Pro"
-            textSize = 18f
+            textSize = 17f
             setTypeface(null, Typeface.BOLD)
             setTextColor(accentGreenBright)
         })
         brandCol.addView(TextView(ctx).apply {
-            text = "Auto Clicker • Ride Catcher • Order Split"
+            text = if (selectedLang == "HI") "ऑटो क्लिकर • राइड कैचर ($selectedLang)" else "Auto Clicker • Ride Catcher ($selectedLang)"
             textSize = 11f
             setTextColor(textMuted)
         })
 
-        val statusLabel = if (hasActiveSubscription) {
+        val badgeText = if (hasActiveSubscription) {
             val dLeft = TimeUnit.MILLISECONDS.toDays(activeUntilMillis - nowMillis).coerceAtLeast(0L)
-            "ACTIVE • ${dLeft}d"
+            "30D•${dLeft}d"
         } else {
             val hLeft = TimeUnit.MILLISECONDS.toHours(trialEndMillis - nowMillis).coerceAtLeast(0L)
-            "TRIAL • ${hLeft}h"
+            "TRIAL•${hLeft}h"
         }
 
-        val statusBadgeTv = TextView(ctx).apply {
-            text = statusLabel
+        val badgeTv = TextView(ctx).apply {
+            text = badgeText
             textSize = 10f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            background = makeRoundedBg(
-                if (hasActiveSubscription) accentGreen else accentBlue,
-                borderSlate,
-                12f
-            )
-            setPadding(12, 8, 12, 8)
+            background = makeRoundedBg(accentBlue, borderSlate, 12f)
+            setPadding(10, 8, 10, 8)
         }
 
-        val threeDotsBtn = Button(ctx).apply {
+        val riderDotsBtn = Button(ctx).apply {
             text = "⋮"
             textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
-            background = makeRoundedBg(cardElevated, borderSlate, 14f)
+            background = makeRoundedBg(cardElevated, borderSlate, 12f)
             setPadding(14, 6, 14, 6)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { leftMargin = 8 }
+            ).apply { leftMargin = 6 }
         }
 
+        topBar.addView(leftAdminBtn)
         topBar.addView(brandCol)
-        topBar.addView(statusBadgeTv)
-        topBar.addView(threeDotsBtn)
+        topBar.addView(badgeTv)
+        topBar.addView(riderDotsBtn)
         root.addView(topBar)
 
         val frame = FrameLayout(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
 
-        val homeScroll = ScrollView(ctx).apply { setPadding(18, 14, 18, 14) }
+        val homeScroll = ScrollView(ctx).apply { setPadding(18, 14, 18, 24) }
         val homeLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
         if (broadcastMessage.isNotBlank()) {
             val noticeCard = makeCard(ctx, cardElevated, accentGold)
             noticeCard.addView(TextView(ctx).apply {
-                text = "📢 Notice: $broadcastMessage"
+                text = "📢 $broadcastMessage"
                 textSize = 12f
                 setTextColor(accentGold)
             })
@@ -1046,10 +1125,10 @@ class MainActivity : Activity() {
             text = "📍 Dibrugarh Fleet Dispatcher"
             textSize = 12f
             setTextColor(Color.parseColor("#60A5FA"))
-            setPadding(0, 6, 0, 6)
+            setPadding(0, 4, 0, 4)
         })
         val fleetStateTv = TextView(ctx).apply {
-            text = "Engine Standby (Open ⋮ to Activate)"
+            text = if (selectedLang == "HI") "स्टैंडबाय (⋮ से चालू करें)" else "Standby (Open ⋮ to Activate)"
             textSize = 12f
             setTextColor(Color.parseColor("#F87171"))
         }
@@ -1064,29 +1143,47 @@ class MainActivity : Activity() {
         val dropEt = makeStyledInput(ctx, dropDef, "Drop Km")
         val amountEt = makeStyledInput(ctx, fareDef, "Amount ₹")
 
-        val tabDetailCard = makeCard(ctx, cardDark, borderSlate).apply { visibility = View.GONE }
-        val tabDetailTv = TextView(ctx).apply {
-            textSize = 13f
-            setTextColor(textWhite)
+        val statsSummaryTv = TextView(ctx).apply {
+            text = "Rides: $totalRides | Earnings: ₹$totalEarnings | Distance: ${String.format(Locale.US, "%.1f", totalDistance)} Km"
+            textSize = 12f
+            setTextColor(accentGreenBright)
+            setPadding(0, 6, 0, 0)
         }
-        tabDetailCard.addView(tabDetailTv)
 
-        val autoAcceptBtn = makeStyledButton(ctx, "⚡\nAuto Accept\nOFF", Color.parseColor("#2A3954")).apply {
+        val savePrefsAction: () -> Unit = {
+            prefs.edit()
+                .putString("pickup_km", pickupEt.text.toString().trim())
+                .putString("drop_km", dropEt.text.toString().trim())
+                .putString("fare_rs", amountEt.text.toString().trim())
+                .apply()
+            speakText(
+                ctx,
+                swSoundTts.isChecked,
+                if (selectedLang == "HI") "सेटिंग्स सेव हो गई" else "Rider preferences saved"
+            )
+            Toast.makeText(ctx, "Preferences Saved", Toast.LENGTH_SHORT).show()
+        }
+
+        val autoAcceptBtn = makeStyledButton(ctx, "⚡\nAUTO ACCEPT\nOFF", Color.parseColor("#2A3954")).apply {
             setOnClickListener {
                 if (!isEngineActivated) {
-                    Toast.makeText(ctx, "Open ⋮ on top to Activate first", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        ctx,
+                        if (selectedLang == "HI") "पहले ऊपर ⋮ दबाकर एक्टिवेट करें" else "Open ⋮ on top to Activate first",
+                        Toast.LENGTH_SHORT
+                    ).show()
                     return@setOnClickListener
                 }
                 isAutoAcceptEnabled = !isAutoAcceptEnabled
                 if (isAutoAcceptEnabled) {
-                    text = "⚡\nAuto Accept\nON"
-                    background = makeRoundedBg(accentGreen, accentGreenBright, 16f)
+                    text = "⚡\nAUTO ACCEPT\nON"
+                    background = makeRoundedBg(accentGreen, accentGreenBright, 14f)
                     fleetStateTv.text = "Active • 0.00s Auto Accept ON"
                     fleetStateTv.setTextColor(accentGreenBright)
                     speakText(ctx, swSoundTts.isChecked, "Auto Accept On")
                 } else {
-                    text = "⚡\nAuto Accept\nOFF"
-                    background = makeRoundedBg(Color.parseColor("#2A3954"), borderSlate, 16f)
+                    text = "⚡\nAUTO ACCEPT\nOFF"
+                    background = makeRoundedBg(Color.parseColor("#2A3954"), borderSlate, 14f)
                     fleetStateTv.text = "Activated • Auto Accept OFF"
                     fleetStateTv.setTextColor(accentGold)
                     speakText(ctx, swSoundTts.isChecked, "Auto Accept Off")
@@ -1094,47 +1191,44 @@ class MainActivity : Activity() {
             }
         }
 
-        threeDotsBtn.setOnClickListener {
-            val popup = PopupMenu(ctx, threeDotsBtn)
-            popup.menu.add(if (isEngineActivated) "🔴 Deactivate Engine" else "🟢 Activate Engine")
-            popup.menu.add("📈 Live Earnings Dashboard (Today)")
-            popup.menu.add("🎨 Customize Rider App")
+        riderDotsBtn.setOnClickListener {
+            val popup = PopupMenu(ctx, riderDotsBtn)
+            popup.menu.add(if (isEngineActivated) "Deactivate Engine" else "Activate Engine")
+            popup.menu.add("⚙️ Settings")
+            popup.menu.add("🌐 Language: Hindi / English")
             popup.menu.add("💬 Live Chat")
             popup.menu.add("🌐 QR & Links")
-            popup.menu.add("🔐 Admin Panel")
+            popup.menu.add("🛡️ Admin Panel")
             popup.setOnMenuItemClickListener { item ->
                 when (item.title.toString()) {
-                    "🟢 Activate Engine", "🔴 Deactivate Engine" -> {
+                    "Activate Engine", "Deactivate Engine" -> {
                         isEngineActivated = !isEngineActivated
                         if (isEngineActivated) {
                             fleetStateTv.text = "Activated • Ready for Auto Accept"
                             fleetStateTv.setTextColor(accentGold)
-                            speakText(ctx, swSoundTts.isChecked, "Captain Smart Pro Activated")
-                            Toast.makeText(ctx, "Activated", Toast.LENGTH_SHORT).show()
+                            speakText(ctx, swSoundTts.isChecked, "Activated")
+                            Toast.makeText(ctx, "Engine Activated", Toast.LENGTH_SHORT).show()
                         } else {
                             isAutoAcceptEnabled = false
-                            autoAcceptBtn.text = "⚡\nAuto Accept\nOFF"
-                            autoAcceptBtn.background = makeRoundedBg(Color.parseColor("#2A3954"), borderSlate, 16f)
-                            fleetStateTv.text = "Paused (Deactivated)"
+                            autoAcceptBtn.text = "⚡\nAUTO ACCEPT\nOFF"
+                            autoAcceptBtn.background = makeRoundedBg(Color.parseColor("#2A3954"), borderSlate, 14f)
+                            fleetStateTv.text = "Standby (Deactivated)"
                             fleetStateTv.setTextColor(Color.parseColor("#F87171"))
                             speakText(ctx, swSoundTts.isChecked, "Deactivated")
-                            Toast.makeText(ctx, "Deactivated", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, "Engine Deactivated", Toast.LENGTH_SHORT).show()
                         }
                     }
-                    "📈 Live Earnings Dashboard (Today)" -> {
-                        tabDetailCard.visibility = View.VISIBLE
-                        tabDetailTv.text =
-                            "📈 Live Earnings Dashboard (Today)\nTotal Earnings: ₹$totalEarnings  |  Total Rides: $totalRides  |  Total Distance: ${String.format(Locale.US, "%.1f", totalDistance)} Km"
-                    }
-                    "🎨 Customize Rider App" -> openRiderCustomizeDialog(
-                        ctx, prefs, pickupEt, dropEt, amountEt, swSoundTts, swScreenshot
-                    ) {
-                        speakText(ctx, swSoundTts.isChecked, "Customized")
-                        Toast.makeText(ctx, "Saved", Toast.LENGTH_SHORT).show()
+                    "⚙️ Settings" -> openRiderSettingsDialog(
+                        ctx, deviceId, pickupEt, dropEt, amountEt,
+                        swOnlyOlaRapido, swSoundTts, swAutoAccept, swScreenshot, savePrefsAction
+                    )
+                    "🌐 Language: Hindi / English" -> {
+                        toggleAppLanguage(ctx, deviceId)
+                        renderRiderScreen(ctx, deviceId, System.currentTimeMillis(), trialEndMillis - TimeUnit.DAYS.toMillis(configurableTrialDays), activeUntilMillis)
                     }
                     "💬 Live Chat" -> openRiderLiveChatDialog(ctx, deviceId)
                     "🌐 QR & Links" -> openRiderLinksAndQrDialog(ctx)
-                    "🔐 Admin Panel" -> promptAdminPassport(ctx, deviceId)
+                    "🛡️ Admin Panel" -> promptAdminPassport(ctx, deviceId)
                 }
                 true
             }
@@ -1144,6 +1238,7 @@ class MainActivity : Activity() {
         fleetRow.addView(fleetLeft)
         fleetRow.addView(autoAcceptBtn)
         fleetCard.addView(fleetRow)
+        fleetCard.addView(statsSummaryTv)
         homeLayout.addView(fleetCard)
 
         val row1 = LinearLayout(ctx).apply {
@@ -1153,7 +1248,7 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = 12 }
         }
-        row1.addView(makeStyledButton(ctx, "📷 Test Ride Accept & Save", accentBlue).apply {
+        row1.addView(makeStyledButton(ctx, "📷 TEST RIDE ACCEPT & SAVE", accentBlue).apply {
             textSize = 11f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 rightMargin = 6
@@ -1171,8 +1266,17 @@ class MainActivity : Activity() {
                     .putInt("total_earnings", totalEarnings)
                     .putFloat("total_distance", totalDistance)
                     .apply()
+                statsSummaryTv.text =
+                    "Rides: $totalRides | Earnings: ₹$totalEarnings | Distance: ${String.format(Locale.US, "%.1f", totalDistance)} Km"
                 val saved = if (swScreenshot.isChecked) saveScreenshotToGallery(ctx, root) else false
-                speakText(ctx, swSoundTts.isChecked, "Ride accepted for $rs rupees, pickup $pKm kilometer, drop $dKm kilometer")
+                speakText(
+                    ctx,
+                    swSoundTts.isChecked,
+                    if (selectedLang == "HI")
+                        "$rs रुपये की राइड एक्सेप्ट हुई, पिकअप $pKm किलोमीटर, ड्रॉप $dKm किलोमीटर"
+                    else
+                        "Ride accepted for $rs rupees, pickup $pKm kilometer, drop $dKm kilometer"
+                )
                 Toast.makeText(
                     ctx,
                     if (saved) "Ride Accepted & Screenshot Saved" else "Ride Accepted",
@@ -1180,7 +1284,7 @@ class MainActivity : Activity() {
                 ).show()
             }
         })
-        row1.addView(makeStyledButton(ctx, "🔀 Order Split Form", accentPurple).apply {
+        row1.addView(makeStyledButton(ctx, "🔀 ORDER SPLIT FORM", accentPurple).apply {
             textSize = 11f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 leftMargin = 6
@@ -1195,10 +1299,10 @@ class MainActivity : Activity() {
         val rulesCard = makeCard(ctx, cardDark, borderSlate)
         rulesCard.addView(TextView(ctx).apply {
             text = "⚙️ Rider Ride Rules (Pickup • Drop • Amount)"
-            textSize = 15f
+            textSize = 14f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
-            setPadding(0, 0, 0, 12)
+            setPadding(0, 0, 0, 10)
         })
 
         rulesCard.addView(TextView(ctx).apply {
@@ -1229,68 +1333,17 @@ class MainActivity : Activity() {
         rulesCard.addView(swAutoAccept)
         rulesCard.addView(swScreenshot)
 
-        rulesCard.addView(makeStyledButton(ctx, "Save Rider Preferences", accentGreen).apply {
-            setOnClickListener {
-                prefs.edit()
-                    .putString("pickup_km", pickupEt.text.toString().trim())
-                    .putString("drop_km", dropEt.text.toString().trim())
-                    .putString("fare_rs", amountEt.text.toString().trim())
-                    .apply()
-                speakText(ctx, swSoundTts.isChecked, "Preferences Saved")
-                Toast.makeText(ctx, "Preferences Saved", Toast.LENGTH_SHORT).show()
-            }
+        rulesCard.addView(makeStyledButton(ctx, "SAVE RIDER PREFERENCES", accentGreen).apply {
+            setOnClickListener { savePrefsAction() }
         })
         homeLayout.addView(rulesCard)
-        homeLayout.addView(tabDetailCard)
+
+        // Social Links Card right in the lower space (replaces cut-off bottom bar)
+        homeLayout.addView(buildSocialLinksCard(ctx))
 
         homeScroll.addView(homeLayout)
         frame.addView(homeScroll)
         root.addView(frame)
-
-        // Clean, non-overlapping Bottom Navigation Strip
-        val bottomBar = HorizontalScrollView(ctx).apply {
-            setBackgroundColor(headerDark)
-            setPadding(10, 8, 10, 20)
-        }
-        val navRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-        val bottomTabs = listOf("🏠 HOME", "📊 ANALYTICS", "🕒 HISTORY", "❓ HELP", "ℹ️ ABOUT")
-        for (tabLabel in bottomTabs) {
-            navRow.addView(Button(ctx).apply {
-                text = tabLabel
-                textSize = 10f
-                setTypeface(null, Typeface.BOLD)
-                setTextColor(textWhite)
-                background = makeRoundedBg(cardElevated, borderSlate, 12f)
-                setPadding(14, 10, 14, 10)
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { rightMargin = 8 }
-                setOnClickListener {
-                    when {
-                        tabLabel.contains("HOME") -> tabDetailCard.visibility = View.GONE
-                        tabLabel.contains("ANALYTICS") -> {
-                            tabDetailCard.visibility = View.VISIBLE
-                            tabDetailTv.text = "Analytics • Total Rides: $totalRides | Earnings: ₹$totalEarnings"
-                        }
-                        tabLabel.contains("HISTORY") -> {
-                            tabDetailCard.visibility = View.VISIBLE
-                            tabDetailTv.text = "History • Completed Rides: $totalRides | Distance: ${String.format(Locale.US, "%.1f", totalDistance)} Km"
-                        }
-                        tabLabel.contains("HELP") -> {
-                            tabDetailCard.visibility = View.VISIBLE
-                            tabDetailTv.text = "Help • Tap ⋮ on top to Activate, open Live Earnings, Chat, Links or Admin Panel."
-                        }
-                        else -> {
-                            tabDetailCard.visibility = View.VISIBLE
-                            tabDetailTv.text = "About • Captain Smart Pro v2.5 • Dibrugarh Fleet Dispatcher"
-                        }
-                    }
-                }
-            })
-        }
-        bottomBar.addView(navRow)
-        root.addView(bottomBar)
 
         setContentView(root)
     }
@@ -1462,6 +1515,6 @@ class MainActivity : Activity() {
                 bmp.setPixel(x, y, if (isDark) Color.BLACK else Color.WHITE)
             }
         }
-        return Bitmap.createScaledBitmap(bmp, 360, 360, false)
+        return Bitmap.createScaledBitmap(bmp, 340, 340, false)
     }
 }
