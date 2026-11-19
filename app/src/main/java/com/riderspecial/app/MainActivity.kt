@@ -19,6 +19,7 @@ import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -390,7 +391,6 @@ class MainActivity : Activity() {
         speakText(ctx, true, if (selectedLang == "HI") "हिन्दी भाषा चुनी गई" else "English language selected")
     }
 
-    // Compact 2x2 small-text social buttons inside a single card above the bottom edge
     private fun buildCompactSocialLinksCard(ctx: Context): LinearLayout {
         val linksCard = makeCard(ctx, cardDark, borderSlate)
         linksCard.addView(TextView(ctx).apply {
@@ -575,14 +575,16 @@ class MainActivity : Activity() {
                         .child("captain_smart_pro")
                         .child("chats")
                         .child(targetId)
-                    val k = chatRef.push().key ?: return@setOnClickListener
-                    chatRef.child(k).setValue(
-                        mapOf(
-                            "sender" to "Admin",
-                            "message" to m,
-                            "time" to System.currentTimeMillis()
+                    val k = chatRef.push().key
+                    if (k != null) {
+                        chatRef.child(k).setValue(
+                            mapOf(
+                                "sender" to "Admin",
+                                "message" to m,
+                                "time" to System.currentTimeMillis()
+                            )
                         )
-                    )
+                    }
                     msgEt.setText("")
                     Toast.makeText(ctx, "Message sent", Toast.LENGTH_SHORT).show()
                 } catch (_: Exception) {
