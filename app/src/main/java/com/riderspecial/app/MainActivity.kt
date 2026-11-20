@@ -2,6 +2,8 @@ package com.riderspecial.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -9,6 +11,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -21,7 +24,9 @@ import android.speech.tts.TextToSpeech
 import android.text.InputType
 import android.util.Base64
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -32,6 +37,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -66,6 +72,10 @@ class MainActivity : Activity() {
     private var pendingPhotoCallback: ((String) -> Unit)? = null
     private val reqPickImage = 4091
 
+    private var overlayView: View? = null
+    private var windowManager: WindowManager? = null
+    private var lastNotifiedMsgKey = ""
+
     private val bgDark = Color.parseColor("#060A14")
     private val headerDark = Color.parseColor("#0A1224")
     private val cardDark = Color.parseColor("#101A30")
@@ -85,6 +95,9 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val ctx: Context = this
+        createChatNotificationChannel(ctx)
+        startRiderMessageWatcher(ctx)
+
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         selectedLang = prefs.getString("app_lang", "EN") ?: "EN"
 
@@ -99,6 +112,208 @@ class MainActivity : Activity() {
             ?: "unknown_device"
 
         loadAndStart(ctx, hardwareId)
+    }
+
+    private fun createChatNotificationChannel(ctx: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "csp_rider_chat",
+                "Rider Chat Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts when a rider sends a message or photo"
+            }
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(channel)
+        }
+    }
+
+    private fun showRiderMessageNotification(ctx: Context, title: String, bodyText: String) {
+        try {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                android.app.Notification.Builder(ctx, "csp_rider_chat")
+            } else {
+                @Suppress("DEPRECATION")
+                android.app.Notification.Builder(ctx)
+            }
+            val notif = builder
+                .setSmallIcon(android.R.drawable.ic_dialog_email)
+                .setContentTitle(title)
+                .setContentText(bodyText)
+                .setAutoCancel(true)
+                .build()
+            nm.notify((System.currentTimeMillis() % 100000).toInt(), notif)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun startRiderMessageWatcher(ctx: Context) {
+        val startTime = System.currentTimeMillis()
+        try {
+            FirebaseDatabase.getInstance().reference
+                .child("captain_smart_pro")
+                .child("chats")
+                .addChildEventListener(object : ChildEventListener {
+                    override fun onChildAdded(riderSnap: DataSnapshot, previousChildName: String?) {
+                        attachSingleRiderChatListener(ctx, riderSnap.key ?: return, startTime)
+                    }
+
+                    override fun onChildChanged(riderSnap: DataSnapshot, previousChildName: String?) {
+                        attachSingleRiderChatListener(ctx, riderSnap.key ?: return, startTime)
+                    }
+
+                    override fun onChildRemoved(snapshot: DataSnapshot) {}
+                    override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+                    override fun onCancelled(error: DatabaseError) {}
+                })
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun attachSingleRiderChatListener(ctx: Context, riderId: String, startTime: Long) {
+        try {
+            FirebaseDatabase.getInstance().reference
+                .child("captain_smart_pro")
+                .child("chats")
+                .child(riderId)
+                .addChildEventListener(object : ChildEventListener {
+                    override fun onChildAdded(msgSnap: DataSnapshot, previousChildName: String?) {
+                        val key = msgSnap.key ?: return
+                        if (key == lastNotifiedMsgKey) return
+                        val sender = msgSnap.child("sender").getValue(String::class.java) ?: "Rider"
+                        if (sender.startsWith("Admin", ignoreCase = true)) return
+                        val msgTime = msgSnap.child("time").getValue(Long::class.java) ?: 0L
+                        if (msgTime < startTime - 2000L) return
+
+                        lastNotifiedMsgKey = key
+                        val message = msgSnap.child("message").getValue(String::class.java).orEmpty()
+                        val hasPhoto = !(msgSnap.child("photoB64").getValue(String::class.java).isNullOrBlank())
+                        val preview = when {
+                            message.isNotBlank() && hasPhoto -> "$message [Photo]"
+                            hasPhoto -> "Photo / Screenshot bheja hai"
+                            else -> message
+                        }
+                        showRiderMessageNotification(
+                            ctx,
+                            "Rider Message: $sender ($riderId)",
+                            preview
+                        )
+                        Toast.makeText(ctx, "$sender ne message bheja: $preview", Toast.LENGTH_LONG).show()
+                    }
+
+                    override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+                    override fun onChildRemoved(snapshot: DataSnapshot) {}
+                    override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+                    override fun onCancelled(error: DatabaseError) {}
+                })
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun toggleFloatingBubble(ctx: Context) {
+        if (overlayView != null) {
+            removeFloatingBubble()
+            Toast.makeText(ctx, "Floating Bubble Hidden", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(ctx)) {
+            Toast.makeText(ctx, "Allow Display over other apps for Bubble", Toast.LENGTH_LONG).show()
+            try {
+                ctx.startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${ctx.packageName}")
+                    )
+                )
+            } catch (_: Exception) {
+            }
+            return
+        }
+
+        try {
+            val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            windowManager = wm
+            val bubble = TextView(ctx).apply {
+                text = "CSP"
+                textSize = 13f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                background = make3dPill(accentGreen, accentGreenBright, 90f)
+            }
+            val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+            val params = WindowManager.LayoutParams(
+                130,
+                130,
+                layoutType,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = 40
+                y = 220
+            }
+
+            var initialX = 0
+            var initialY = 0
+            var initialTouchX = 0f
+            var initialTouchY = 0f
+            var moved = false
+
+            bubble.setOnTouchListener { _, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        initialX = params.x
+                        initialY = params.y
+                        initialTouchX = event.rawX
+                        initialTouchY = event.rawY
+                        moved = false
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = (event.rawX - initialTouchX).toInt()
+                        val dy = (event.rawY - initialTouchY).toInt()
+                        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) moved = true
+                        params.x = initialX + dx
+                        params.y = initialY + dy
+                        wm.updateViewLayout(bubble, params)
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if (!moved) {
+                            val launch = Intent(ctx, MainActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            }
+                            ctx.startActivity(launch)
+                        }
+                        true
+                    }
+                    else -> false
+                }
+            }
+
+            wm.addView(bubble, params)
+            overlayView = bubble
+            Toast.makeText(ctx, "Floating Bubble Shown", Toast.LENGTH_SHORT).show()
+        } catch (_: Exception) {
+            Toast.makeText(ctx, "Could not show Floating Bubble", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun removeFloatingBubble() {
+        try {
+            if (overlayView != null && windowManager != null) {
+                windowManager?.removeView(overlayView)
+            }
+        } catch (_: Exception) {
+        }
+        overlayView = null
     }
 
     private fun applyTtsLanguage() {
@@ -125,9 +340,17 @@ class MainActivity : Activity() {
                 val original = BitmapFactory.decodeStream(inputStream)
                 inputStream?.close()
                 if (original != null) {
-                    val scaled = Bitmap.createScaledBitmap(original, 220, 220, true)
+                    val maxDim = 800
+                    val ratio = minOf(
+                        maxDim.toFloat() / original.width.coerceAtLeast(1),
+                        maxDim.toFloat() / original.height.coerceAtLeast(1),
+                        1f
+                    )
+                    val w = (original.width * ratio).toInt().coerceAtLeast(1)
+                    val h = (original.height * ratio).toInt().coerceAtLeast(1)
+                    val scaled = Bitmap.createScaledBitmap(original, w, h, true)
                     val baos = ByteArrayOutputStream()
-                    scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 90, baos)
                     val encoded = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
                     callback(encoded)
                 }
@@ -184,21 +407,29 @@ class MainActivity : Activity() {
     }
 
     private fun openLargePhotoDialog(ctx: Context, bmp: Bitmap, title: String) {
+        val scroll = ScrollView(ctx)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(24, 20, 24, 20)
+            setPadding(20, 16, 20, 20)
             gravity = Gravity.CENTER_HORIZONTAL
         }
+        val screenW = ctx.resources.displayMetrics.widthPixels
+        val targetW = (screenW * 0.85f).toInt().coerceAtLeast(420)
+        val aspect = if (bmp.width > 0) bmp.height.toFloat() / bmp.width.toFloat() else 1.5f
+        val targetH = (targetW * aspect).toInt().coerceIn(360, 1200)
+
         val bigView = ImageView(ctx).apply {
             setImageBitmap(bmp)
-            layoutParams = LinearLayout.LayoutParams(620, 620).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            adjustViewBounds = true
+            layoutParams = LinearLayout.LayoutParams(targetW, targetH).apply {
                 bottomMargin = 14
             }
         }
         val dlBtn = Button(ctx).apply {
-            text = "Download Photo"
+            text = "Download HD Photo"
             setOnClickListener {
-                val ok = saveBitmapToGallery(ctx, bmp, "ChatPhoto")
+                val ok = saveBitmapToGallery(ctx, bmp, "ChatPhoto_HD")
                 Toast.makeText(
                     ctx,
                     if (ok) "Photo downloaded to Gallery" else "Download failed",
@@ -208,10 +439,11 @@ class MainActivity : Activity() {
         }
         box.addView(bigView)
         box.addView(dlBtn)
+        scroll.addView(box)
 
         AlertDialog.Builder(ctx)
             .setTitle(title)
-            .setView(box)
+            .setView(scroll)
             .setNegativeButton("Close", null)
             .show()
     }
@@ -225,18 +457,6 @@ class MainActivity : Activity() {
         val pickupOk = ridePickupKm <= maxPickupKm
         val fareOk = rideFareRs >= minFareRs
         return pickupOk && fareOk
-    }
-
-    private fun buildSharedBrandBadge(ctx: Context, badgeEmoji: String, accentStroke: Int): TextView {
-        return TextView(ctx).apply {
-            text = badgeEmoji
-            textSize = 18f
-            gravity = Gravity.CENTER
-            background = make3dPill(cardElevated, accentStroke, 14f)
-            layoutParams = LinearLayout.LayoutParams(86, 86).apply {
-                rightMargin = 10
-            }
-        }
     }
 
     private fun loadAndStart(ctx: Context, hardwareId: String) {
@@ -392,7 +612,7 @@ class MainActivity : Activity() {
             setOnClickListener { promptAdminPassport(ctx, existingMobile.ifBlank { hardwareId }) }
         })
         topRow.addView(TextView(ctx).apply {
-            text = "  🏍️ Captain Smart Pro"
+            text = "  Captain Smart Pro"
             textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(accentGreenBright)
@@ -528,7 +748,7 @@ class MainActivity : Activity() {
         val brandCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = 8
+                leftMargin = 10
             }
         }
         brandCol.addView(TextView(ctx).apply {
@@ -553,7 +773,6 @@ class MainActivity : Activity() {
         }
 
         topBar.addView(adminLeftBtn)
-        topBar.addView(buildSharedBrandBadge(ctx, "🛡️", Color.parseColor("#60A5FA")))
         topBar.addView(brandCol)
         topBar.addView(adminDotsBtn)
         root.addView(topBar)
@@ -742,7 +961,8 @@ class MainActivity : Activity() {
         val mSub = "💳 Subscription (Days +/-)"
         val mPlans = "🏷️ Plan Prices (1M/2M/3M)"
         val mTrial = "⏳ Free Trial Days"
-        val mChat = "💬 Rider Chat & Photos"
+        val mChat = "💬 Rider Chat & HD Photos"
+        val mBubble = "🫧 Floating Bubble Toggle"
         val mBlock = "🛡️ Block / Unblock Rider"
         val mQrLinks = "📱 QR Code & Social Links"
         val mLang = "🌐 Language: Hindi / English"
@@ -754,6 +974,7 @@ class MainActivity : Activity() {
             popup.menu.add(mPlans)
             popup.menu.add(mTrial)
             popup.menu.add(mChat)
+            popup.menu.add(mBubble)
             popup.menu.add(mBlock)
             popup.menu.add(mQrLinks)
             popup.menu.add(mLang)
@@ -764,6 +985,7 @@ class MainActivity : Activity() {
                     mPlans -> openPlanPricesDialog(ctx)
                     mTrial -> openTrialManagerDialog(ctx, defaultRiderId)
                     mChat -> openAdminRiderChatDialog(ctx, defaultRiderId)
+                    mBubble -> toggleFloatingBubble(ctx)
                     mBlock -> openBlockRiderDialog(ctx, defaultRiderId)
                     mQrLinks -> openAdminQrAndLinksDialog(ctx)
                     mLang -> {
@@ -1137,18 +1359,20 @@ class MainActivity : Activity() {
                             if (text.isNotBlank()) {
                                 val msgTv = TextView(ctx)
                                 msgTv.text = "$sender: $text"
-                                msgTv.textSize = 12f
+                                msgTv.textSize = 13f
                                 messagesBox.addView(msgTv)
                             }
                             val bmp = decodeBase64Bitmap(photoB64)
                             if (bmp != null) {
                                 val thumbView = ImageView(ctx).apply {
                                     setImageBitmap(bmp)
-                                    layoutParams = LinearLayout.LayoutParams(260, 260).apply {
-                                        topMargin = 4
-                                        bottomMargin = 8
+                                    scaleType = ImageView.ScaleType.FIT_CENTER
+                                    adjustViewBounds = true
+                                    layoutParams = LinearLayout.LayoutParams(420, 420).apply {
+                                        topMargin = 6
+                                        bottomMargin = 10
                                     }
-                                    setOnClickListener { openLargePhotoDialog(ctx, bmp, "Photo from $sender") }
+                                    setOnClickListener { openLargePhotoDialog(ctx, bmp, "HD Photo from $sender") }
                                 }
                                 messagesBox.addView(thumbView)
                             }
@@ -1207,7 +1431,7 @@ class MainActivity : Activity() {
         scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle("💬 Rider Chat & Photos")
+            .setTitle("💬 Rider Chat & HD Photos")
             .setView(scroll)
             .setOnDismissListener {
                 if (activeListener != null && activeRefPath != null) {
@@ -1234,7 +1458,7 @@ class MainActivity : Activity() {
         }
         var tempQrB64 = customQrBase64
         val qrPreview = ImageView(ctx).apply {
-            layoutParams = LinearLayout.LayoutParams(220, 220).apply {
+            layoutParams = LinearLayout.LayoutParams(240, 240).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
                 topMargin = 8
                 bottomMargin = 8
@@ -1342,7 +1566,7 @@ class MainActivity : Activity() {
             hint = if (selectedLang == "HI") "संदेश लिखें..." else "Type message..."
         }
         val photoPreview = ImageView(ctx).apply {
-            layoutParams = LinearLayout.LayoutParams(160, 160).apply {
+            layoutParams = LinearLayout.LayoutParams(180, 180).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
                 topMargin = 6
                 bottomMargin = 6
@@ -1517,7 +1741,7 @@ class MainActivity : Activity() {
             setOnClickListener { promptAdminPassport(ctx, riderId) }
         })
         topRow.addView(TextView(ctx).apply {
-            text = "  💳 Captain Smart Pro"
+            text = "  Captain Smart Pro"
             textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(accentGreenBright)
@@ -1671,7 +1895,7 @@ class MainActivity : Activity() {
         val brandCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = 8
+                leftMargin = 10
             }
         }
         brandCol.addView(TextView(ctx).apply {
@@ -1700,7 +1924,6 @@ class MainActivity : Activity() {
         }
 
         topBar.addView(leftAdminBtn)
-        topBar.addView(buildSharedBrandBadge(ctx, "🏍️", accentGreenBright))
         topBar.addView(brandCol)
         topBar.addView(riderDotsBtn)
         root.addView(topBar)
@@ -1821,14 +2044,14 @@ class MainActivity : Activity() {
             } else {
                 if (isHi) "▶️ इंजन चालू करें" else "▶️ Activate Engine"
             }
-            val accLabel = if (isHi) "♿ एक्सेसिबिलिटी सेटिंग" else "♿ Accessibility Settings"
+            val bubbleLabel = if (isHi) "🫧 फ़्लोटिंग बबल" else "🫧 Floating Bubble"
             val setLabel = if (isHi) "⚙️ सेटिंग्स" else "⚙️ Settings"
             val langLabel = if (isHi) "🌐 भाषा: हिन्दी / English" else "🌐 Language: Hindi / English"
             val chatLabel = if (isHi) "💬 लाइव चैट" else "💬 Live Chat"
             val linksLabel = if (isHi) "📱 सोशल लिंक्स" else "📱 Social Links"
 
             popup.menu.add(actLabel)
-            popup.menu.add(accLabel)
+            popup.menu.add(bubbleLabel)
             popup.menu.add(setLabel)
             popup.menu.add(langLabel)
             popup.menu.add(chatLabel)
@@ -1853,13 +2076,7 @@ class MainActivity : Activity() {
                             Toast.makeText(ctx, if (isHi) "इंजन बंद" else "Engine Deactivated", Toast.LENGTH_SHORT).show()
                         }
                     }
-                    accLabel -> {
-                        try {
-                            ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        } catch (_: Exception) {
-                            Toast.makeText(ctx, "Open Settings > Accessibility", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                    bubbleLabel -> toggleFloatingBubble(ctx)
                     setLabel -> openRiderSettingsDialog(
                         ctx, riderId, pickupEt, dropEt, amountEt,
                         swOnlyOlaRapido, swSoundTts, swAutoAccept, swScreenshot, savePrefsAction
@@ -2179,6 +2396,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        removeFloatingBubble()
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()
