@@ -7,12 +7,14 @@ import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -70,6 +72,7 @@ class MainActivity : Activity() {
 
     private var pendingPhotoCallback: ((String) -> Unit)? = null
     private val reqPickImage = 4091
+    private val reqLocationPerm = 4092
     private var lastNotifiedMsgKey = ""
 
     private val bgDark = Color.parseColor("#060A14")
@@ -91,6 +94,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val ctx: Context = this
+        requestLocationPermissionIfNeeded(ctx)
         createChatNotificationChannel(ctx)
         startRiderMessageWatcher(ctx)
 
@@ -108,6 +112,71 @@ class MainActivity : Activity() {
             ?: "unknown_device"
 
         loadAndStart(ctx, hardwareId)
+    }
+
+    private fun requestLocationPermissionIfNeeded(ctx: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(
+                    arrayOf(
+                        android.Manifest.permission.ACCESS_FINE_LOCATION,
+                        android.Manifest.permission.ACCESS_COARSE_LOCATION
+                    ),
+                    reqLocationPerm
+                )
+            }
+        }
+    }
+
+    private fun readCurrentLocation(ctx: Context): Pair<Double, Double>? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return null
+            }
+            val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val providers = lm.getProviders(true)
+            for (provider in providers) {
+                val loc = lm.getLastKnownLocation(provider)
+                if (loc != null) {
+                    return Pair(loc.latitude, loc.longitude)
+                }
+            }
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun deleteRiderFromAdmin(ctx: Context, targetRiderId: String, onDone: () -> Unit) {
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
+        prefs.edit()
+            .remove("trial_start_$targetRiderId")
+            .remove("active_until_$targetRiderId")
+            .remove("blocked_$targetRiderId")
+            .remove("local_chat_$targetRiderId")
+            .apply()
+        if ((prefs.getString("rider_mobile_id", "")?.trim() ?: "") == targetRiderId) {
+            prefs.edit()
+                .remove("rider_full_name")
+                .remove("rider_mobile_id")
+                .remove("rider_photo_b64")
+                .apply()
+        }
+        try {
+            val root = FirebaseDatabase.getInstance().reference.child("captain_smart_pro")
+            root.child("riders").child(targetRiderId).removeValue()
+            root.child("payment_requests").child(targetRiderId).removeValue()
+        } catch (_: Exception) {
+        }
+        Toast.makeText(
+            ctx,
+            "Rider $targetRiderId deleted. Can create fresh account with same number.",
+            Toast.LENGTH_LONG
+        ).show()
+        onDone()
     }
 
     private fun resetLocalLoginForFreshAccount(ctx: Context, hardwareId: String) {
@@ -423,10 +492,6 @@ class MainActivity : Activity() {
             .show()
     }
 
-    // Updated Ride Rules:
-    // - Pickup <= maxPickupKm
-    // - If dropLimitEnabled is ON: Drop <= maxDropKm; if OFF: no upper drop limit
-    // - Fare >= minFareRs (higher allowed, lower not allowed)
     private fun matchesRideRules(
         ridePickupKm: Float,
         rideDropKm: Float,
@@ -485,21 +550,29 @@ class MainActivity : Activity() {
         val hasActiveSub = nowMillis < activeUntil
         val inTrial = !hasActiveSub && (nowMillis < trialEnd)
 
+        val coords = readCurrentLocation(ctx)
+        val latVal = coords?.first ?: 0.0
+        val lngVal = coords?.second ?: 0.0
+
         try {
             val rootRef = FirebaseDatabase.getInstance().reference.child("captain_smart_pro")
-            rootRef.child("riders").child(riderId).updateChildren(
-                mapOf(
-                    "riderId" to riderId,
-                    "fullName" to riderName,
-                    "mobile" to riderMobile,
-                    "hardwareId" to hardwareId,
-                    "photoB64" to riderPhotoB64,
-                    "trialStart" to trialStart,
-                    "activeUntil" to activeUntil,
-                    "online" to true,
-                    "lastSeen" to nowMillis
-                )
+            val riderMap = mutableMapOf<String, Any>(
+                "riderId" to riderId,
+                "fullName" to riderName,
+                "mobile" to riderMobile,
+                "hardwareId" to hardwareId,
+                "photoB64" to riderPhotoB64,
+                "trialStart" to trialStart,
+                "activeUntil" to activeUntil,
+                "online" to true,
+                "lastSeen" to nowMillis
             )
+            if (coords != null) {
+                riderMap["lat"] = latVal
+                riderMap["lng"] = lngVal
+                riderMap["locationUpdatedAt"] = nowMillis
+            }
+            rootRef.child("riders").child(riderId).updateChildren(riderMap)
             rootRef.child("config").get().addOnSuccessListener { snap ->
                 val dbTrial = snap.child("trialDays").getValue(Long::class.java)
                 if (dbTrial != null && dbTrial >= 0L) {
@@ -657,6 +730,7 @@ class MainActivity : Activity() {
                     .putString("rider_mobile_id", mobileId)
                     .putString("rider_photo_b64", photoB64)
                     .putLong("trial_start_$mobileId", System.currentTimeMillis())
+                    .remove("blocked_$mobileId")
                     .apply()
                 loadAndStart(ctx, hardwareId)
             }
@@ -989,6 +1063,73 @@ class MainActivity : Activity() {
         setContentView(root)
     }
 
+    private data class RiderEntry(
+        val rId: String,
+        val name: String,
+        val mobile: String,
+        val photoB64: String,
+        val isOnline: Boolean,
+        val lat: Double?,
+        val lng: Double?,
+        val locTime: Long
+    )
+
+    private fun openSingleRiderActionsDialog(ctx: Context, entry: RiderEntry, refreshList: () -> Unit) {
+        val locText = if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
+            "Lat: ${String.format(Locale.US, "%.5f", entry.lat)}, Lng: ${String.format(Locale.US, "%.5f", entry.lng)}"
+        } else {
+            "Live location not available yet"
+        }
+
+        val options = arrayOf(
+            "📞 Call Rider (${entry.mobile})",
+            "💬 Chat & Photos",
+            "📍 Open Live Location on Map",
+            "💳 Subscription Days (+/-)",
+            "🛡️ Block / Unblock Rider",
+            "🗑️ Delete Rider (Allow Fresh Account)"
+        )
+
+        AlertDialog.Builder(ctx)
+            .setTitle("${entry.name} (${entry.mobile})\n$locText")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        if (entry.mobile.isNotBlank()) {
+                            ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${entry.mobile}")))
+                        }
+                    }
+                    1 -> openAdminRiderChatDialog(ctx, entry.rId)
+                    2 -> {
+                        if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
+                            val geoUri = Uri.parse("geo:${entry.lat},${entry.lng}?q=${entry.lat},${entry.lng}(${Uri.encode(entry.name)})")
+                            try {
+                                ctx.startActivity(Intent(Intent.ACTION_VIEW, geoUri))
+                            } catch (_: Exception) {
+                                Toast.makeText(ctx, locText, Toast.LENGTH_LONG).show()
+                            }
+                        } else {
+                            Toast.makeText(ctx, "Rider location not available right now", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    3 -> openSubscriptionManagerDialog(ctx, entry.rId)
+                    4 -> openBlockRiderDialog(ctx, entry.rId)
+                    5 -> {
+                        AlertDialog.Builder(ctx)
+                            .setTitle("🗑️ Delete Rider")
+                            .setMessage("Delete ${entry.name} (${entry.mobile})? They can create a fresh account with the same number.")
+                            .setPositiveButton("Delete") { _, _ ->
+                                deleteRiderFromAdmin(ctx, entry.rId, refreshList)
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    }
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     private fun confirmFreshAccountReset(ctx: Context, hardwareId: String) {
         AlertDialog.Builder(ctx)
             .setTitle("🔄 Fresh Account Reset")
@@ -1135,22 +1276,43 @@ class MainActivity : Activity() {
         scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle(if (onlyOnline) "🟢 Online Riders" else "👥 Total Riders")
+            .setTitle(if (onlyOnline) "🟢 Online Riders (Tap for Actions)" else "👥 Total Riders (Tap for Actions)")
             .setView(scroll)
             .setNegativeButton("Close", null)
             .show()
 
-        data class RiderEntry(
-            val rId: String,
-            val name: String,
-            val mobile: String,
-            val photoB64: String,
-            val isOnline: Boolean
-        )
-
         val allEntries = mutableListOf<RiderEntry>()
 
-        fun renderEntries(filterQuery: String) {
+        fun loadEntriesFromDb() {
+            try {
+                val now = System.currentTimeMillis()
+                FirebaseDatabase.getInstance().reference.child("captain_smart_pro").child("riders")
+                    .get()
+                    .addOnSuccessListener { snap ->
+                        allEntries.clear()
+                        for (child in snap.children) {
+                            val rId = child.child("riderId").getValue(String::class.java) ?: (child.key ?: "")
+                            val name = child.child("fullName").getValue(String::class.java) ?: "Unknown"
+                            val mobile = child.child("mobile").getValue(String::class.java) ?: rId
+                            val photoB64 = child.child("photoB64").getValue(String::class.java) ?: ""
+                            val lastSeen = child.child("lastSeen").getValue(Long::class.java) ?: 0L
+                            val isOnline = (child.child("online").getValue(Boolean::class.java) ?: false) &&
+                                ((now - lastSeen) < TimeUnit.MINUTES.toMillis(15))
+                            val lat = child.child("lat").getValue(Double::class.java)
+                            val lng = child.child("lng").getValue(Double::class.java)
+                            val locTime = child.child("locationUpdatedAt").getValue(Long::class.java) ?: 0L
+                            if (onlyOnline && !isOnline) continue
+                            allEntries.add(RiderEntry(rId, name, mobile, photoB64, isOnline, lat, lng, locTime))
+                        }
+                        renderEntries(searchEt.text.toString())
+                    }
+            } catch (_: Exception) {
+                listContainer.removeAllViews()
+                listContainer.addView(TextView(ctx).apply { text = "Unable to load riders list." })
+            }
+        }
+
+        renderEntries = label@{ filterQuery: String ->
             listContainer.removeAllViews()
             val q = filterQuery.trim().lowercase(Locale.US)
             var count = 0
@@ -1165,18 +1327,25 @@ class MainActivity : Activity() {
                 val row = LinearLayout(ctx).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    setPadding(0, 8, 0, 8)
+                    setPadding(0, 10, 0, 10)
+                    setOnClickListener {
+                        openSingleRiderActionsDialog(ctx, entry) { loadEntriesFromDb() }
+                    }
                 }
                 val bmp = decodeBase64Bitmap(entry.photoB64)
                 val photoView = ImageView(ctx).apply {
                     layoutParams = LinearLayout.LayoutParams(96, 96).apply { rightMargin = 12 }
                     if (bmp != null) {
                         setImageBitmap(bmp)
-                        setOnClickListener { openLargePhotoDialog(ctx, bmp, "${entry.name} (${entry.mobile})") }
                     }
                 }
+                val locInfo = if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
+                    "\nLoc: ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
+                } else {
+                    "\nLoc: Not shared"
+                }
                 val detailsTv = TextView(ctx).apply {
-                    text = "${entry.name}\nID / Mobile: ${entry.mobile}\nStatus: ${if (entry.isOnline) "ONLINE" else "OFFLINE"}"
+                    text = "${entry.name} (${entry.mobile})\nStatus: ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
                     textSize = 12f
                 }
                 row.addView(photoView)
@@ -1198,30 +1367,10 @@ class MainActivity : Activity() {
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
 
-        try {
-            val now = System.currentTimeMillis()
-            FirebaseDatabase.getInstance().reference.child("captain_smart_pro").child("riders")
-                .get()
-                .addOnSuccessListener { snap ->
-                    allEntries.clear()
-                    for (child in snap.children) {
-                        val rId = child.child("riderId").getValue(String::class.java) ?: (child.key ?: "")
-                        val name = child.child("fullName").getValue(String::class.java) ?: "Unknown"
-                        val mobile = child.child("mobile").getValue(String::class.java) ?: rId
-                        val photoB64 = child.child("photoB64").getValue(String::class.java) ?: ""
-                        val lastSeen = child.child("lastSeen").getValue(Long::class.java) ?: 0L
-                        val isOnline = (child.child("online").getValue(Boolean::class.java) ?: false) &&
-                            ((now - lastSeen) < TimeUnit.MINUTES.toMillis(15))
-                        if (onlyOnline && !isOnline) continue
-                        allEntries.add(RiderEntry(rId, name, mobile, photoB64, isOnline))
-                    }
-                    renderEntries(searchEt.text.toString())
-                }
-        } catch (_: Exception) {
-            listContainer.removeAllViews()
-            listContainer.addView(TextView(ctx).apply { text = "Unable to load riders list." })
-        }
+        loadEntriesFromDb()
     }
+
+    private var renderEntries: (String) -> Unit = {}
 
     private fun openSubscriptionManagerDialog(ctx: Context, defaultRiderId: String) {
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
