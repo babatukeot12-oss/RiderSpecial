@@ -11,7 +11,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -24,12 +23,12 @@ import android.speech.tts.TextToSpeech
 import android.text.InputType
 import android.util.Base64
 import android.view.Gravity
-import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.View
-import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -71,9 +70,6 @@ class MainActivity : Activity() {
 
     private var pendingPhotoCallback: ((String) -> Unit)? = null
     private val reqPickImage = 4091
-
-    private var overlayView: View? = null
-    private var windowManager: WindowManager? = null
     private var lastNotifiedMsgKey = ""
 
     private val bgDark = Color.parseColor("#060A14")
@@ -112,6 +108,41 @@ class MainActivity : Activity() {
             ?: "unknown_device"
 
         loadAndStart(ctx, hardwareId)
+    }
+
+    private fun resetLocalLoginForFreshAccount(ctx: Context, hardwareId: String) {
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
+        val prevRiderId = prefs.getString("rider_mobile_id", "")?.trim().orEmpty()
+        prefs.edit()
+            .remove("rider_full_name")
+            .remove("rider_mobile_id")
+            .remove("rider_photo_b64")
+            .remove("total_rides")
+            .remove("total_earnings")
+            .remove("total_distance")
+            .apply()
+        if (prevRiderId.isNotEmpty()) {
+            prefs.edit()
+                .remove("trial_start_$prevRiderId")
+                .remove("active_until_$prevRiderId")
+                .remove("blocked_$prevRiderId")
+                .remove("local_chat_$prevRiderId")
+                .apply()
+        }
+        Toast.makeText(
+            ctx,
+            if (selectedLang == "HI") "पुराना लॉगिन हटाया गया, नया अकाउंट बनाएं" else "Previous login cleared for fresh account",
+            Toast.LENGTH_LONG
+        ).show()
+        showRiderRegistrationScreen(ctx, hardwareId, "", "", "")
+    }
+
+    private fun openAccessibilityScreen(ctx: Context) {
+        try {
+            ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        } catch (_: Exception) {
+            Toast.makeText(ctx, "Open Phone Settings > Accessibility", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun createChatNotificationChannel(ctx: Context) {
@@ -211,111 +242,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun toggleFloatingBubble(ctx: Context) {
-        if (overlayView != null) {
-            removeFloatingBubble()
-            Toast.makeText(ctx, "Floating Bubble Hidden", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(ctx)) {
-            Toast.makeText(ctx, "Allow Display over other apps for Bubble", Toast.LENGTH_LONG).show()
-            try {
-                ctx.startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${ctx.packageName}")
-                    )
-                )
-            } catch (_: Exception) {
-            }
-            return
-        }
-
-        try {
-            val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            windowManager = wm
-            val bubble = TextView(ctx).apply {
-                text = "CSP"
-                textSize = 13f
-                setTypeface(null, Typeface.BOLD)
-                setTextColor(Color.WHITE)
-                gravity = Gravity.CENTER
-                background = make3dPill(accentGreen, accentGreenBright, 90f)
-            }
-            val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
-            }
-            val params = WindowManager.LayoutParams(
-                130,
-                130,
-                layoutType,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.TOP or Gravity.START
-                x = 40
-                y = 220
-            }
-
-            var initialX = 0
-            var initialY = 0
-            var initialTouchX = 0f
-            var initialTouchY = 0f
-            var moved = false
-
-            bubble.setOnTouchListener { _, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initialX = params.x
-                        initialY = params.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
-                        moved = false
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = (event.rawX - initialTouchX).toInt()
-                        val dy = (event.rawY - initialTouchY).toInt()
-                        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) moved = true
-                        params.x = initialX + dx
-                        params.y = initialY + dy
-                        wm.updateViewLayout(bubble, params)
-                        true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        if (!moved) {
-                            val launch = Intent(ctx, MainActivity::class.java).apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                            }
-                            ctx.startActivity(launch)
-                        }
-                        true
-                    }
-                    else -> false
-                }
-            }
-
-            wm.addView(bubble, params)
-            overlayView = bubble
-            Toast.makeText(ctx, "Floating Bubble Shown", Toast.LENGTH_SHORT).show()
-        } catch (_: Exception) {
-            Toast.makeText(ctx, "Could not show Floating Bubble", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun removeFloatingBubble() {
-        try {
-            if (overlayView != null && windowManager != null) {
-                windowManager?.removeView(overlayView)
-            }
-        } catch (_: Exception) {
-        }
-        overlayView = null
-    }
-
     private fun applyTtsLanguage() {
         tts?.language = if (selectedLang == "HI") Locale("hi", "IN") else Locale.US
     }
@@ -340,7 +266,7 @@ class MainActivity : Activity() {
                 val original = BitmapFactory.decodeStream(inputStream)
                 inputStream?.close()
                 if (original != null) {
-                    val maxDim = 800
+                    val maxDim = 1280
                     val ratio = minOf(
                         maxDim.toFloat() / original.width.coerceAtLeast(1),
                         maxDim.toFloat() / original.height.coerceAtLeast(1),
@@ -350,7 +276,7 @@ class MainActivity : Activity() {
                     val h = (original.height * ratio).toInt().coerceAtLeast(1)
                     val scaled = Bitmap.createScaledBitmap(original, w, h, true)
                     val baos = ByteArrayOutputStream()
-                    scaled.compress(Bitmap.CompressFormat.JPEG, 90, baos)
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 92, baos)
                     val encoded = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
                     callback(encoded)
                 }
@@ -407,29 +333,75 @@ class MainActivity : Activity() {
     }
 
     private fun openLargePhotoDialog(ctx: Context, bmp: Bitmap, title: String) {
-        val scroll = ScrollView(ctx)
+        val screenW = ctx.resources.displayMetrics.widthPixels
+        val baseW = (screenW * 0.85f).toInt().coerceAtLeast(420)
+        val aspect = if (bmp.width > 0) bmp.height.toFloat() / bmp.width.toFloat() else 1.5f
+        val baseH = (baseW * aspect).toInt().coerceIn(360, 1400)
+
+        var zoomFactor = 1.0f
+
+        val vScroll = ScrollView(ctx)
+        val hScroll = HorizontalScrollView(ctx)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(20, 16, 20, 20)
             gravity = Gravity.CENTER_HORIZONTAL
         }
-        val screenW = ctx.resources.displayMetrics.widthPixels
-        val targetW = (screenW * 0.85f).toInt().coerceAtLeast(420)
-        val aspect = if (bmp.width > 0) bmp.height.toFloat() / bmp.width.toFloat() else 1.5f
-        val targetH = (targetW * aspect).toInt().coerceIn(360, 1200)
 
         val bigView = ImageView(ctx).apply {
             setImageBitmap(bmp)
             scaleType = ImageView.ScaleType.FIT_CENTER
             adjustViewBounds = true
-            layoutParams = LinearLayout.LayoutParams(targetW, targetH).apply {
-                bottomMargin = 14
+            layoutParams = LinearLayout.LayoutParams(baseW, baseH).apply {
+                bottomMargin = 12
             }
         }
-        val dlBtn = Button(ctx).apply {
-            text = "Download HD Photo"
+
+        val scaleDetector = ScaleGestureDetector(ctx, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                zoomFactor = (zoomFactor * detector.scaleFactor).coerceIn(1.0f, 3.0f)
+                bigView.layoutParams = LinearLayout.LayoutParams(
+                    (baseW * zoomFactor).toInt(),
+                    (baseH * zoomFactor).toInt()
+                ).apply { bottomMargin = 12 }
+                return true
+            }
+        })
+
+        bigView.setOnTouchListener { _, event ->
+            scaleDetector.onTouchEvent(event)
+            true
+        }
+
+        val zoomRow = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 10)
+        }
+        val zoomInBtn = Button(ctx).apply {
+            text = "Zoom +"
             setOnClickListener {
-                val ok = saveBitmapToGallery(ctx, bmp, "ChatPhoto_HD")
+                zoomFactor = (zoomFactor + 0.5f).coerceAtMost(3.0f)
+                bigView.layoutParams = LinearLayout.LayoutParams(
+                    (baseW * zoomFactor).toInt(),
+                    (baseH * zoomFactor).toInt()
+                ).apply { bottomMargin = 12 }
+            }
+        }
+        val zoomResetBtn = Button(ctx).apply {
+            text = "Reset"
+            setOnClickListener {
+                zoomFactor = 1.0f
+                bigView.layoutParams = LinearLayout.LayoutParams(baseW, baseH).apply { bottomMargin = 12 }
+            }
+        }
+        zoomRow.addView(zoomInBtn)
+        zoomRow.addView(zoomResetBtn)
+
+        val dlBtn = Button(ctx).apply {
+            text = "Download Photo"
+            setOnClickListener {
+                val ok = saveBitmapToGallery(ctx, bmp, "ChatPhoto_Clear")
                 Toast.makeText(
                     ctx,
                     if (ok) "Photo downloaded to Gallery" else "Download failed",
@@ -437,26 +409,37 @@ class MainActivity : Activity() {
                 ).show()
             }
         }
-        box.addView(bigView)
+
+        hScroll.addView(bigView)
+        box.addView(hScroll)
+        box.addView(zoomRow)
         box.addView(dlBtn)
-        scroll.addView(box)
+        vScroll.addView(box)
 
         AlertDialog.Builder(ctx)
             .setTitle(title)
-            .setView(scroll)
+            .setView(vScroll)
             .setNegativeButton("Close", null)
             .show()
     }
 
+    // Updated Ride Rules:
+    // - Pickup <= maxPickupKm
+    // - If dropLimitEnabled is ON: Drop <= maxDropKm; if OFF: no upper drop limit
+    // - Fare >= minFareRs (higher allowed, lower not allowed)
     private fun matchesRideRules(
         ridePickupKm: Float,
+        rideDropKm: Float,
         rideFareRs: Int,
         maxPickupKm: Float,
+        maxDropKm: Float,
+        dropLimitEnabled: Boolean,
         minFareRs: Int
     ): Boolean {
         val pickupOk = ridePickupKm <= maxPickupKm
+        val dropOk = if (dropLimitEnabled) (rideDropKm <= maxDropKm) else true
         val fareOk = rideFareRs >= minFareRs
-        return pickupOk && fareOk
+        return pickupOk && dropOk && fareOk
     }
 
     private fun loadAndStart(ctx: Context, hardwareId: String) {
@@ -561,7 +544,7 @@ class MainActivity : Activity() {
     private fun showBlockedScreen(ctx: Context, riderId: String, riderName: String) {
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
-            setPadding(22, 72, 22, 96)
+            setPadding(22, 72, 22, 116)
         }
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         col.addView(makeStyledButton(ctx, "🛡️ ADMIN", accentBlue).apply {
@@ -598,7 +581,7 @@ class MainActivity : Activity() {
 
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
-            setPadding(22, 72, 22, 96)
+            setPadding(22, 72, 22, 116)
         }
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
@@ -621,7 +604,7 @@ class MainActivity : Activity() {
 
         val card = makeCard(ctx, cardDark, borderSlate)
         card.addView(TextView(ctx).apply {
-            text = if (selectedLang == "HI") "🪪 राइडर विवरण (नाम व मोबाइल ID)" else "🪪 Rider Details (Name & Mobile ID)"
+            text = if (selectedLang == "HI") "🪪 नया राइडर अकाउंट (नाम व मोबाइल ID)" else "🪪 Fresh Rider Account (Name & Mobile ID)"
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -659,7 +642,7 @@ class MainActivity : Activity() {
 
         val saveBtn = makeStyledButton(
             ctx,
-            if (selectedLang == "HI") "✅ आगे बढ़ें" else "✅ Continue to App",
+            if (selectedLang == "HI") "✅ नया अकाउंट शुरू करें" else "✅ Start Fresh Account",
             accentGreen
         ).apply {
             setOnClickListener {
@@ -673,6 +656,7 @@ class MainActivity : Activity() {
                     .putString("rider_full_name", fullName)
                     .putString("rider_mobile_id", mobileId)
                     .putString("rider_photo_b64", photoB64)
+                    .putLong("trial_start_$mobileId", System.currentTimeMillis())
                     .apply()
                 loadAndStart(ctx, hardwareId)
             }
@@ -720,6 +704,7 @@ class MainActivity : Activity() {
         val totalRides = prefs.getInt("total_rides", 0)
         val totalEarnings = prefs.getInt("total_earnings", 0)
         val totalDistance = prefs.getFloat("total_distance", 0f)
+        val hwId = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
 
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -779,7 +764,7 @@ class MainActivity : Activity() {
 
         val scroll = ScrollView(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            setPadding(16, 14, 16, 96)
+            setPadding(16, 14, 16, 116)
         }
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
@@ -961,10 +946,10 @@ class MainActivity : Activity() {
         val mSub = "💳 Subscription (Days +/-)"
         val mPlans = "🏷️ Plan Prices (1M/2M/3M)"
         val mTrial = "⏳ Free Trial Days"
-        val mChat = "💬 Rider Chat & HD Photos"
-        val mBubble = "🫧 Floating Bubble Toggle"
+        val mChat = "💬 Rider Chat & Clear Photos"
         val mBlock = "🛡️ Block / Unblock Rider"
         val mQrLinks = "📱 QR Code & Social Links"
+        val mFresh = "🔄 Reset Login (Fresh Account)"
         val mLang = "🌐 Language: Hindi / English"
         val mBack = "🏍️ Rider Panel"
 
@@ -974,9 +959,9 @@ class MainActivity : Activity() {
             popup.menu.add(mPlans)
             popup.menu.add(mTrial)
             popup.menu.add(mChat)
-            popup.menu.add(mBubble)
             popup.menu.add(mBlock)
             popup.menu.add(mQrLinks)
+            popup.menu.add(mFresh)
             popup.menu.add(mLang)
             popup.menu.add(mBack)
             popup.setOnMenuItemClickListener { item ->
@@ -985,17 +970,14 @@ class MainActivity : Activity() {
                     mPlans -> openPlanPricesDialog(ctx)
                     mTrial -> openTrialManagerDialog(ctx, defaultRiderId)
                     mChat -> openAdminRiderChatDialog(ctx, defaultRiderId)
-                    mBubble -> toggleFloatingBubble(ctx)
                     mBlock -> openBlockRiderDialog(ctx, defaultRiderId)
                     mQrLinks -> openAdminQrAndLinksDialog(ctx)
+                    mFresh -> confirmFreshAccountReset(ctx, hwId)
                     mLang -> {
                         toggleAppLanguage(ctx)
                         showAdminDashboardScreen(ctx, defaultRiderId)
                     }
-                    mBack -> {
-                        val hw = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
-                        loadAndStart(ctx, hw)
-                    }
+                    mBack -> loadAndStart(ctx, hwId)
                 }
                 true
             }
@@ -1005,6 +987,17 @@ class MainActivity : Activity() {
         scroll.addView(col)
         root.addView(scroll)
         setContentView(root)
+    }
+
+    private fun confirmFreshAccountReset(ctx: Context, hardwareId: String) {
+        AlertDialog.Builder(ctx)
+            .setTitle("🔄 Fresh Account Reset")
+            .setMessage("Clear local rider login, stats, and trial cache so you can start a fresh account?")
+            .setPositiveButton("Clear & Reset") { _, _ ->
+                resetLocalLoginForFreshAccount(ctx, hardwareId)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun openBlockRiderDialog(ctx: Context, defaultRiderId: String) {
@@ -1368,11 +1361,11 @@ class MainActivity : Activity() {
                                     setImageBitmap(bmp)
                                     scaleType = ImageView.ScaleType.FIT_CENTER
                                     adjustViewBounds = true
-                                    layoutParams = LinearLayout.LayoutParams(420, 420).apply {
+                                    layoutParams = LinearLayout.LayoutParams(440, 440).apply {
                                         topMargin = 6
                                         bottomMargin = 10
                                     }
-                                    setOnClickListener { openLargePhotoDialog(ctx, bmp, "HD Photo from $sender") }
+                                    setOnClickListener { openLargePhotoDialog(ctx, bmp, "Photo from $sender") }
                                 }
                                 messagesBox.addView(thumbView)
                             }
@@ -1431,7 +1424,7 @@ class MainActivity : Activity() {
         scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle("💬 Rider Chat & HD Photos")
+            .setTitle("💬 Rider Chat & Photos")
             .setView(scroll)
             .setOnDismissListener {
                 if (activeListener != null && activeRefPath != null) {
@@ -1636,6 +1629,7 @@ class MainActivity : Activity() {
         pickupEt: EditText,
         dropEt: EditText,
         amountEt: EditText,
+        swDropLimit: Switch,
         swOnlyOlaRapido: Switch,
         swSoundTts: Switch,
         swAutoAccept: Switch,
@@ -1654,6 +1648,10 @@ class MainActivity : Activity() {
         val dEt = EditText(ctx).apply {
             hint = if (selectedLang == "HI") "ड्रॉप दूरी (किमी)" else "Drop Distance (Km)"
             setText(dropEt.text.toString())
+        }
+        val dSw = Switch(ctx).apply {
+            text = if (selectedLang == "HI") "ड्रॉप सीमा लागू करें (On/Off)" else "Enable Drop Limit (On/Off)"
+            isChecked = swDropLimit.isChecked
         }
         val aEt = EditText(ctx).apply {
             hint = if (selectedLang == "HI") "न्यूनतम किराया (₹)" else "Min Ride Amount / Fare (₹)"
@@ -1680,6 +1678,7 @@ class MainActivity : Activity() {
         box.addView(pEt)
         box.addView(TextView(ctx).apply { text = if (selectedLang == "HI") "ड्रॉप (किमी):" else "Drop (Km):" })
         box.addView(dEt)
+        box.addView(dSw)
         box.addView(TextView(ctx).apply { text = if (selectedLang == "HI") "न्यूनतम अमाउंट (₹):" else "Min Ride Amount (₹):" })
         box.addView(aEt)
         box.addView(s1)
@@ -1698,6 +1697,7 @@ class MainActivity : Activity() {
             .setPositiveButton(if (selectedLang == "HI") "सेव करें" else "Save") { _, _ ->
                 pickupEt.setText(pEt.text.toString().trim())
                 dropEt.setText(dEt.text.toString().trim())
+                swDropLimit.isChecked = dSw.isChecked
                 amountEt.setText(aEt.text.toString().trim())
                 swOnlyOlaRapido.isChecked = s1.isChecked
                 swSoundTts.isChecked = s2.isChecked
@@ -1727,7 +1727,7 @@ class MainActivity : Activity() {
 
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
-            setPadding(22, 72, 22, 96)
+            setPadding(22, 72, 22, 116)
         }
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
@@ -1860,7 +1860,8 @@ class MainActivity : Activity() {
         val isHi = selectedLang == "HI"
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val pickupDef = prefs.getString("pickup_km", "1.0") ?: "1.0"
-        val dropDef = prefs.getString("drop_km", "2.0") ?: "2.0"
+        val dropDef = prefs.getString("drop_km", "4.0") ?: "4.0"
+        val dropLimitDef = prefs.getBoolean("drop_limit_on", false)
         val fareDef = prefs.getString("fare_rs", "20") ?: "20"
 
         var totalEarnings = prefs.getInt("total_earnings", 0)
@@ -1932,7 +1933,7 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
 
-        val homeScroll = ScrollView(ctx).apply { setPadding(18, 14, 18, 110) }
+        val homeScroll = ScrollView(ctx).apply { setPadding(18, 14, 18, 116) }
         val homeLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
         if (broadcastMessage.isNotBlank()) {
@@ -1973,6 +1974,7 @@ class MainActivity : Activity() {
         }
         fleetLeft.addView(fleetStateTv)
 
+        val swDropLimit = makeSwitchRow(ctx, if (isHi) "🏁 ड्रॉप सीमा लागू करें (On/Off)" else "🏁 Drop Limit (On/Off)", dropLimitDef)
         val swOnlyOlaRapido = makeSwitchRow(ctx, if (isHi) "⚡ केवल Ola/Rapido" else "⚡ Only Ola/Rapido", true)
         val swSoundTts = makeSwitchRow(ctx, if (isHi) "🔊 आवाज़ / TTS चलाएं" else "🔊 Play Sound / TTS", true)
         val swAutoAccept = makeSwitchRow(ctx, if (isHi) "🤖 ऑटो एक्सेप्ट" else "🤖 Auto Accept", true)
@@ -1996,6 +1998,7 @@ class MainActivity : Activity() {
             prefs.edit()
                 .putString("pickup_km", pickupEt.text.toString().trim())
                 .putString("drop_km", dropEt.text.toString().trim())
+                .putBoolean("drop_limit_on", swDropLimit.isChecked)
                 .putString("fare_rs", amountEt.text.toString().trim())
                 .apply()
             speakText(
@@ -2044,14 +2047,14 @@ class MainActivity : Activity() {
             } else {
                 if (isHi) "▶️ इंजन चालू करें" else "▶️ Activate Engine"
             }
-            val bubbleLabel = if (isHi) "🫧 फ़्लोटिंग बबल" else "🫧 Floating Bubble"
+            val accLabel = if (isHi) "♿ एक्सेसिबिलिटी सेटिंग" else "♿ Accessibility Settings"
             val setLabel = if (isHi) "⚙️ सेटिंग्स" else "⚙️ Settings"
             val langLabel = if (isHi) "🌐 भाषा: हिन्दी / English" else "🌐 Language: Hindi / English"
             val chatLabel = if (isHi) "💬 लाइव चैट" else "💬 Live Chat"
             val linksLabel = if (isHi) "📱 सोशल लिंक्स" else "📱 Social Links"
 
             popup.menu.add(actLabel)
-            popup.menu.add(bubbleLabel)
+            popup.menu.add(accLabel)
             popup.menu.add(setLabel)
             popup.menu.add(langLabel)
             popup.menu.add(chatLabel)
@@ -2076,10 +2079,10 @@ class MainActivity : Activity() {
                             Toast.makeText(ctx, if (isHi) "इंजन बंद" else "Engine Deactivated", Toast.LENGTH_SHORT).show()
                         }
                     }
-                    bubbleLabel -> toggleFloatingBubble(ctx)
+                    accLabel -> openAccessibilityScreen(ctx)
                     setLabel -> openRiderSettingsDialog(
                         ctx, riderId, pickupEt, dropEt, amountEt,
-                        swOnlyOlaRapido, swSoundTts, swAutoAccept, swScreenshot, savePrefsAction
+                        swDropLimit, swOnlyOlaRapido, swSoundTts, swAutoAccept, swScreenshot, savePrefsAction
                     )
                     langLabel -> {
                         toggleAppLanguage(ctx)
@@ -2117,10 +2120,10 @@ class MainActivity : Activity() {
             }
             setOnClickListener {
                 val maxP = pickupEt.text.toString().trim().toFloatOrNull() ?: 1.0f
-                val dKm = dropEt.text.toString().trim().toFloatOrNull() ?: 2.0f
+                val dKm = dropEt.text.toString().trim().toFloatOrNull() ?: 4.0f
                 val minRs = amountEt.text.toString().trim().toIntOrNull() ?: 20
 
-                if (!matchesRideRules(maxP, minRs, maxP, minRs)) {
+                if (!matchesRideRules(maxP, dKm, minRs, maxP, dKm, swDropLimit.isChecked, minRs)) {
                     Toast.makeText(ctx, "Ride did not match rules", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
@@ -2187,11 +2190,12 @@ class MainActivity : Activity() {
         rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
 
         rulesCard.addView(TextView(ctx).apply {
-            text = if (isHi) "🏁 ड्रॉप दूरी (किमी) — कोई सीमा नहीं" else "🏁 Drop Distance (Km) — Any distance allowed"
+            text = if (isHi) "🏁 ड्रॉप दूरी (किमी) — On होने पर अंदर, Off होने पर खुली" else "🏁 Drop Distance (Km) — Capped when On, open when Off"
             textSize = 12f
             setTextColor(textMuted)
         })
         rulesCard.addView(dropEt)
+        rulesCard.addView(swDropLimit)
         rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
 
         rulesCard.addView(TextView(ctx).apply {
@@ -2396,7 +2400,6 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        removeFloatingBubble()
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()
