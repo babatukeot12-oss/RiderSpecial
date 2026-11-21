@@ -1,1 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
 
+    <TextView
+        android:id="@+id/tvPhotoTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Photo from Rider"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <ImageView
+        android:id="@+id/ivRiderPhotoPreview"
+        android:layout_width="match_parent"
+        android:layout_height="320dp"
+        android:layout_marginTop="12dp"
+        android:adjustViewBounds="true"
+        android:contentDescription="Rider Photo"
+        android:scaleType="fitCenter" />
+
+    <Button
+        android:id="@+id/btnDownloadPhoto"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="DOWNLOAD PHOTO" />
+
+    <Button
+        android:id="@+id/btnClosePhoto"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="CLOSE" />
+</LinearLayout>
