@@ -79,6 +79,7 @@ class MainActivity : Activity() {
 
     private var latestLat: Double? = null
     private var latestLng: Double? = null
+    private var liveLocationAutoEnabled: Boolean = true
 
     private val locationHandler = Handler(Looper.getMainLooper())
     private var activeLocationRiderId: String? = null
@@ -92,6 +93,17 @@ class MainActivity : Activity() {
             if (location.latitude != 0.0 || location.longitude != 0.0) {
                 latestLat = location.latitude
                 latestLng = location.longitude
+                val rId = activeLocationRiderId
+                if (!rId.isNullOrBlank() && liveLocationAutoEnabled) {
+                    pushRiderLiveLocation(
+                        ctx = this@MainActivity,
+                        riderId = rId,
+                        riderName = activeLocationRiderName,
+                        vehicleKey = activeLocationVehicleKey,
+                        photoB64 = activeLocationPhotoB64,
+                        hardwareId = activeLocationHardwareId
+                    )
+                }
             }
         }
         @Deprecated("Deprecated in Android")
@@ -103,7 +115,7 @@ class MainActivity : Activity() {
     private val locationRunnable = object : Runnable {
         override fun run() {
             val rId = activeLocationRiderId
-            if (!rId.isNullOrBlank()) {
+            if (!rId.isNullOrBlank() && liveLocationAutoEnabled) {
                 pushRiderLiveLocation(
                     ctx = this@MainActivity,
                     riderId = rId,
@@ -113,7 +125,7 @@ class MainActivity : Activity() {
                     hardwareId = activeLocationHardwareId
                 )
             }
-            locationHandler.postDelayed(this, 8_000L)
+            locationHandler.postDelayed(this, 6_000L)
         }
     }
 
@@ -142,6 +154,7 @@ class MainActivity : Activity() {
 
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         selectedLang = prefs.getString("app_lang", "EN") ?: "EN"
+        liveLocationAutoEnabled = prefs.getBoolean("live_location_enabled", true)
 
         tts = TextToSpeech(ctx) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -168,6 +181,7 @@ class MainActivity : Activity() {
         activeLocationVehicleKey = vehicleKey
         activeLocationPhotoB64 = photoB64
         activeLocationHardwareId = hardwareId
+        liveLocationAutoEnabled = true
         registerLocationUpdates(this)
         locationHandler.removeCallbacks(locationRunnable)
         locationHandler.post(locationRunnable)
@@ -182,11 +196,23 @@ class MainActivity : Activity() {
                 return
             }
             val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 4000L, 1f, gpsListener, Looper.getMainLooper())
-            }
-            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 4000L, 1f, gpsListener, Looper.getMainLooper())
+            val providers = listOf(
+                LocationManager.GPS_PROVIDER,
+                LocationManager.NETWORK_PROVIDER,
+                LocationManager.PASSIVE_PROVIDER
+            )
+            for (provider in providers) {
+                try {
+                    if (lm.isProviderEnabled(provider)) {
+                        lm.requestLocationUpdates(provider, 3000L, 0f, gpsListener, Looper.getMainLooper())
+                        val last = lm.getLastKnownLocation(provider)
+                        if (last != null && (last.latitude != 0.0 || last.longitude != 0.0)) {
+                            latestLat = last.latitude
+                            latestLng = last.longitude
+                        }
+                    }
+                } catch (_: Exception) {
+                }
             }
         } catch (_: Exception) {
         }
@@ -213,6 +239,7 @@ class MainActivity : Activity() {
                 "hardwareId" to hardwareId,
                 "photoB64" to photoB64,
                 "online" to true,
+                "liveLocationOn" to true,
                 "isSharingLocation" to (coords != null),
                 "lastSeen" to nowMillis
             )
@@ -672,6 +699,7 @@ class MainActivity : Activity() {
                     "trialStart" to trialStart,
                     "activeUntil" to activeUntil,
                     "online" to true,
+                    "liveLocationOn" to true,
                     "lastSeen" to nowMillis
                 )
             )
@@ -902,7 +930,7 @@ class MainActivity : Activity() {
 
         val saveBtn = makeStyledButton(
             ctx,
-            if (selectedLang == "HI") "✅ नया अकाउंट शुरू करें" else "✅ Start Fresh Account",
+            if (selectedLang == "HI") "✅ नया अकाउंट शुरू करें (लाइव लोकेशन चालू)" else "✅ Start Fresh Account (Live Location ON)",
             accentGreen
         ).apply {
             setOnClickListener {
@@ -917,14 +945,20 @@ class MainActivity : Activity() {
                     Toast.makeText(ctx, "Please tap a vehicle icon first", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
+                liveLocationAutoEnabled = true
+                requestLocationPermissionIfNeeded(ctx)
+                registerLocationUpdates(ctx)
                 prefs.edit()
                     .putString("rider_full_name", fullName)
                     .putString("rider_mobile_id", mobileId)
                     .putString("rider_vehicle_type", chosenVehicle.key)
                     .putString("rider_photo_b64", photoB64)
+                    .putBoolean("live_location_enabled", true)
                     .putLong("trial_start_$mobileId", System.currentTimeMillis())
                     .remove("blocked_$mobileId")
                     .apply()
+                pushRiderLiveLocation(ctx, mobileId, fullName, chosenVehicle.key, photoB64, hardwareId)
+                Toast.makeText(ctx, "Live Location ON", Toast.LENGTH_SHORT).show()
                 loadAndStart(ctx, hardwareId)
             }
         }
@@ -1267,10 +1301,11 @@ class MainActivity : Activity() {
 
     private fun openSingleRiderActionsDialog(ctx: Context, entry: RiderEntry, refreshList: () -> Unit) {
         val vLabel = VehicleType.safeLabel(entry.vehicleTypeKey)
-        val locText = if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
-            "Live Location: ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
+        val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
+        val locText = if (hasCoords) {
+            "Live Location ON: ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
         } else {
-            "Live Location: Waiting for GPS"
+            "Live Location ON (Acquiring GPS...)"
         }
 
         val options = arrayOf(
@@ -1293,7 +1328,7 @@ class MainActivity : Activity() {
                     }
                     1 -> openAdminRiderChatDialog(ctx, entry.rId)
                     2 -> {
-                        if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
+                        if (hasCoords) {
                             val label = Uri.encode("${entry.name} ($vLabel)")
                             val geoUri = Uri.parse("geo:${entry.lat},${entry.lng}?q=${entry.lat},${entry.lng}($label)")
                             try {
@@ -1302,7 +1337,7 @@ class MainActivity : Activity() {
                                 Toast.makeText(ctx, locText, Toast.LENGTH_LONG).show()
                             }
                         } else {
-                            Toast.makeText(ctx, "Rider location not available right now", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(ctx, "Live Location is ON, turn on Phone GPS/Location to fetch coordinates", Toast.LENGTH_LONG).show()
                         }
                     }
                     3 -> openSubscriptionManagerDialog(ctx, entry.rId)
@@ -1540,9 +1575,9 @@ class MainActivity : Activity() {
                     layoutParams = LinearLayout.LayoutParams(54, 54).apply { rightMargin = 8 }
                 }
                 val locInfo = if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
-                    "\nLive Location: ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
+                    "\nLive Location ON: ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
                 } else {
-                    "\nLive Location: Waiting for GPS"
+                    "\nLive Location ON (Acquiring GPS...)"
                 }
                 val detailsTv = TextView(ctx).apply {
                     text = "${entry.name} (${entry.mobile})\nVehicle: $vLabel • ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
@@ -2319,7 +2354,7 @@ class MainActivity : Activity() {
             setPadding(0, 4, 0, 4)
         })
         val fleetStateTv = TextView(ctx).apply {
-            text = if (isHi) "⏸️ स्टैंडबाय (⋮ से एक्टिव करें)" else "⏸️ Standby (Open ⋮ to Activate)"
+            text = if (isHi) "⏸️ स्टैंडबाय • लाइव लोकेशन चालू" else "⏸️ Standby • Live Location ON"
             textSize = 12f
             setTextColor(Color.parseColor("#F87171"))
         }
