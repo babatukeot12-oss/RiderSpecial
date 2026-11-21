@@ -14,6 +14,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
@@ -75,12 +77,28 @@ class MainActivity : Activity() {
     private val reqLocationPerm = 4092
     private var lastNotifiedMsgKey = ""
 
+    private var latestLat: Double? = null
+    private var latestLng: Double? = null
+
     private val locationHandler = Handler(Looper.getMainLooper())
     private var activeLocationRiderId: String? = null
     private var activeLocationRiderName: String = ""
     private var activeLocationVehicleKey: String? = null
     private var activeLocationPhotoB64: String = ""
     private var activeLocationHardwareId: String = ""
+
+    private val gpsListener = object : LocationListener {
+        override fun onLocationChanged(location: Location) {
+            if (location.latitude != 0.0 || location.longitude != 0.0) {
+                latestLat = location.latitude
+                latestLng = location.longitude
+            }
+        }
+        @Deprecated("Deprecated in Android")
+        override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+        override fun onProviderEnabled(provider: String) {}
+        override fun onProviderDisabled(provider: String) {}
+    }
 
     private val locationRunnable = object : Runnable {
         override fun run() {
@@ -95,7 +113,7 @@ class MainActivity : Activity() {
                     hardwareId = activeLocationHardwareId
                 )
             }
-            locationHandler.postDelayed(this, 10_000L)
+            locationHandler.postDelayed(this, 8_000L)
         }
     }
 
@@ -150,8 +168,28 @@ class MainActivity : Activity() {
         activeLocationVehicleKey = vehicleKey
         activeLocationPhotoB64 = photoB64
         activeLocationHardwareId = hardwareId
+        registerLocationUpdates(this)
         locationHandler.removeCallbacks(locationRunnable)
         locationHandler.post(locationRunnable)
+    }
+
+    private fun registerLocationUpdates(ctx: Context) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+            val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 4000L, 1f, gpsListener, Looper.getMainLooper())
+            }
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 4000L, 1f, gpsListener, Looper.getMainLooper())
+            }
+        } catch (_: Exception) {
+        }
     }
 
     private fun pushRiderLiveLocation(
@@ -202,7 +240,30 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == reqLocationPerm) {
+            registerLocationUpdates(this)
+            val rId = activeLocationRiderId
+            if (!rId.isNullOrBlank()) {
+                pushRiderLiveLocation(
+                    this,
+                    rId,
+                    activeLocationRiderName,
+                    activeLocationVehicleKey,
+                    activeLocationPhotoB64,
+                    activeLocationHardwareId
+                )
+            }
+        }
+    }
+
     private fun readCurrentLocation(ctx: Context): Pair<Double, Double>? {
+        val cachedLat = latestLat
+        val cachedLng = latestLng
+        if (cachedLat != null && cachedLng != null && (cachedLat != 0.0 || cachedLng != 0.0)) {
+            return Pair(cachedLat, cachedLng)
+        }
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
                 ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
@@ -221,6 +282,8 @@ class MainActivity : Activity() {
                     if (lm.isProviderEnabled(provider)) {
                         val loc = lm.getLastKnownLocation(provider)
                         if (loc != null && (loc.latitude != 0.0 || loc.longitude != 0.0)) {
+                            latestLat = loc.latitude
+                            latestLng = loc.longitude
                             return Pair(loc.latitude, loc.longitude)
                         }
                     }
@@ -1205,9 +1268,9 @@ class MainActivity : Activity() {
     private fun openSingleRiderActionsDialog(ctx: Context, entry: RiderEntry, refreshList: () -> Unit) {
         val vLabel = VehicleType.safeLabel(entry.vehicleTypeKey)
         val locText = if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
-            "Lat: ${String.format(Locale.US, "%.5f", entry.lat)}, Lng: ${String.format(Locale.US, "%.5f", entry.lng)}"
+            "Live Location: ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
         } else {
-            "Live location not available yet"
+            "Live Location: Waiting for GPS"
         }
 
         val options = arrayOf(
@@ -1470,21 +1533,23 @@ class MainActivity : Activity() {
                     layoutParams = LinearLayout.LayoutParams(90, 90).apply { rightMargin = 8 }
                     if (bmp != null) setImageBitmap(bmp)
                 }
-                val vehicleIconView = ImageView(ctx).apply {
-                    layoutParams = LinearLayout.LayoutParams(56, 56).apply { rightMargin = 10 }
-                    setImageResource(VehicleType.safeIcon(entry.vehicleTypeKey))
+                val vehicleBadge = TextView(ctx).apply {
+                    text = "🏍️"
+                    textSize = 22f
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(54, 54).apply { rightMargin = 8 }
                 }
                 val locInfo = if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
-                    "\nLoc: ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
+                    "\nLive Location: ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
                 } else {
-                    "\nLoc: Not shared"
+                    "\nLive Location: Waiting for GPS"
                 }
                 val detailsTv = TextView(ctx).apply {
                     text = "${entry.name} (${entry.mobile})\nVehicle: $vLabel • ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
                     textSize = 12f
                 }
                 row.addView(photoView)
-                row.addView(vehicleIconView)
+                row.addView(vehicleBadge)
                 row.addView(detailsTv)
                 listContainer.addView(row)
             }
@@ -2687,6 +2752,11 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         locationHandler.removeCallbacks(locationRunnable)
+        try {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            lm.removeUpdates(gpsListener)
+        } catch (_: Exception) {
+        }
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()
