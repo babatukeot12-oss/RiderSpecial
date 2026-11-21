@@ -73,13 +73,13 @@ class MainActivity : Activity() {
     private var customQrBase64 = ""
 
     private var pendingPhotoCallback: ((String) -> Unit)? = null
+    private var pendingEngineActivateCallback: (() -> Unit)? = null
     private val reqPickImage = 4091
-    private val reqLocationPerm = 4092
+    private val reqEngineLocationPerm = 4092
     private var lastNotifiedMsgKey = ""
 
     private var latestLat: Double? = null
     private var latestLng: Double? = null
-    private var liveLocationAutoEnabled: Boolean = true
 
     private val locationHandler = Handler(Looper.getMainLooper())
     private var activeLocationRiderId: String? = null
@@ -94,7 +94,7 @@ class MainActivity : Activity() {
                 latestLat = location.latitude
                 latestLng = location.longitude
                 val rId = activeLocationRiderId
-                if (!rId.isNullOrBlank() && liveLocationAutoEnabled) {
+                if (!rId.isNullOrBlank() && hasRiderLocationPermission(this@MainActivity)) {
                     pushRiderLiveLocation(
                         ctx = this@MainActivity,
                         riderId = rId,
@@ -115,7 +115,7 @@ class MainActivity : Activity() {
     private val locationRunnable = object : Runnable {
         override fun run() {
             val rId = activeLocationRiderId
-            if (!rId.isNullOrBlank() && liveLocationAutoEnabled) {
+            if (!rId.isNullOrBlank() && hasRiderLocationPermission(this@MainActivity)) {
                 pushRiderLiveLocation(
                     ctx = this@MainActivity,
                     riderId = rId,
@@ -148,13 +148,11 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val ctx: Context = this
-        requestLocationPermissionIfNeeded(ctx)
         createChatNotificationChannel(ctx)
         startRiderMessageWatcher(ctx)
 
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         selectedLang = prefs.getString("app_lang", "EN") ?: "EN"
-        liveLocationAutoEnabled = prefs.getBoolean("live_location_enabled", true)
 
         tts = TextToSpeech(ctx) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -169,6 +167,114 @@ class MainActivity : Activity() {
         loadAndStart(ctx, hardwareId)
     }
 
+    private fun hasRiderLocationPermission(ctx: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    private fun requireLocationPermissionForEngine(ctx: Context, onGranted: () -> Unit) {
+        if (hasRiderLocationPermission(ctx)) {
+            registerLocationUpdates(ctx)
+            onGranted()
+            return
+        }
+
+        pendingEngineActivateCallback = onGranted
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Toast.makeText(
+                ctx,
+                if (selectedLang == "HI")
+                    "इंजन चालू करने के लिए लोकेशन परमिशन देना अनिवार्य है"
+                else
+                    "Location permission is required to activate engine",
+                Toast.LENGTH_LONG
+            ).show()
+            requestPermissions(
+                arrayOf(
+                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                ),
+                reqEngineLocationPerm
+            )
+        } else {
+            onGranted()
+        }
+    }
+
+    private fun showPermissionRequiredGateDialog(ctx: Context, onRetryGranted: () -> Unit) {
+        val isHi = selectedLang == "HI"
+        AlertDialog.Builder(ctx)
+            .setTitle(if (isHi) "📍 लोकेशन परमिशन ज़रूरी है" else "📍 Location Permission Required")
+            .setMessage(
+                if (isHi)
+                    "लोकेशन परमिशन दिए बिना इंजन चालू नहीं होगा। कृपया परमिशन दें या सेटिंग्स से Location अनुमति चालू करें।"
+                else
+                    "Engine cannot start without Location permission. Please allow Location permission to continue."
+            )
+            .setCancelable(false)
+            .setPositiveButton(if (isHi) "परमिशन दें" else "Allow Permission") { _, _ ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    pendingEngineActivateCallback = onRetryGranted
+                    requestPermissions(
+                        arrayOf(
+                            android.Manifest.permission.ACCESS_FINE_LOCATION,
+                            android.Manifest.permission.ACCESS_COARSE_LOCATION
+                        ),
+                        reqEngineLocationPerm
+                    )
+                }
+            }
+            .setNeutralButton(if (isHi) "सेटिंग्स खोलें" else "App Settings") { _, _ ->
+                try {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.parse("package:${ctx.packageName}")
+                    }
+                    ctx.startActivity(intent)
+                } catch (_: Exception) {
+                }
+            }
+            .setNegativeButton(if (isHi) "बंद रखें" else "Keep Off") { _, _ ->
+                pendingEngineActivateCallback = null
+                Toast.makeText(
+                    ctx,
+                    if (isHi) "परमिशन नहीं दी गई, इंजन बंद है" else "Permission denied, engine remains off",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            .show()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == reqEngineLocationPerm) {
+            val callback = pendingEngineActivateCallback
+            pendingEngineActivateCallback = null
+            if (hasRiderLocationPermission(this)) {
+                registerLocationUpdates(this)
+                val rId = activeLocationRiderId
+                if (!rId.isNullOrBlank()) {
+                    pushRiderLiveLocation(
+                        this,
+                        rId,
+                        activeLocationRiderName,
+                        activeLocationVehicleKey,
+                        activeLocationPhotoB64,
+                        activeLocationHardwareId
+                    )
+                }
+                callback?.invoke()
+            } else {
+                showPermissionRequiredGateDialog(this) {
+                    callback?.invoke()
+                }
+            }
+        }
+    }
+
     private fun startLocationLoop(
         riderId: String,
         riderName: String,
@@ -181,20 +287,16 @@ class MainActivity : Activity() {
         activeLocationVehicleKey = vehicleKey
         activeLocationPhotoB64 = photoB64
         activeLocationHardwareId = hardwareId
-        liveLocationAutoEnabled = true
-        registerLocationUpdates(this)
-        locationHandler.removeCallbacks(locationRunnable)
-        locationHandler.post(locationRunnable)
+        if (hasRiderLocationPermission(this)) {
+            registerLocationUpdates(this)
+            locationHandler.removeCallbacks(locationRunnable)
+            locationHandler.post(locationRunnable)
+        }
     }
 
     private fun registerLocationUpdates(ctx: Context) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED
-            ) {
-                return
-            }
+            if (!hasRiderLocationPermission(ctx)) return
             val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
             val providers = listOf(
                 LocationManager.GPS_PROVIDER,
@@ -226,6 +328,7 @@ class MainActivity : Activity() {
         photoB64: String,
         hardwareId: String
     ) {
+        if (!hasRiderLocationPermission(ctx)) return
         val nowMillis = System.currentTimeMillis()
         val coords = readCurrentLocation(ctx)
         val cleanVehicle = VehicleType.fromKey(vehicleKey)?.key ?: "bike"
@@ -240,83 +343,57 @@ class MainActivity : Activity() {
                 "photoB64" to photoB64,
                 "online" to true,
                 "liveLocationOn" to true,
-                "isSharingLocation" to true,
-                "lat" to coords.first,
-                "lng" to coords.second,
-                "locationUpdatedAt" to nowMillis,
+                "isSharingLocation" to (coords != null),
                 "lastSeen" to nowMillis
             )
+            if (coords != null) {
+                riderMap["lat"] = coords.first
+                riderMap["lng"] = coords.second
+                riderMap["locationUpdatedAt"] = nowMillis
+            }
             rootRef.child("riders").child(riderId).updateChildren(riderMap)
         } catch (_: Exception) {
         }
     }
 
-    private fun requestLocationPermissionIfNeeded(ctx: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(
-                    arrayOf(
-                        android.Manifest.permission.ACCESS_FINE_LOCATION,
-                        android.Manifest.permission.ACCESS_COARSE_LOCATION
-                    ),
-                    reqLocationPerm
-                )
-            }
-        }
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == reqLocationPerm) {
-            registerLocationUpdates(this)
-            val rId = activeLocationRiderId
-            if (!rId.isNullOrBlank()) {
-                pushRiderLiveLocation(
-                    this,
-                    rId,
-                    activeLocationRiderName,
-                    activeLocationVehicleKey,
-                    activeLocationPhotoB64,
-                    activeLocationHardwareId
-                )
-            }
-        }
-    }
-
-    private fun readCurrentLocation(ctx: Context): Pair<Double, Double> {
-        val cachedLat = latestLat
-        val cachedLng = latestLng
-        if (cachedLat != null && cachedLng != null && (cachedLat != 0.0 || cachedLng != 0.0)) {
-            return Pair(cachedLat, cachedLng)
-        }
-        try {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
-                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            ) {
-                val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                val providers = listOf(
-                    LocationManager.GPS_PROVIDER,
-                    LocationManager.NETWORK_PROVIDER,
-                    LocationManager.PASSIVE_PROVIDER
-                )
-                for (provider in providers) {
-                    try {
-                        if (lm.isProviderEnabled(provider)) {
-                            val loc = lm.getLastKnownLocation(provider)
-                            if (loc != null && (loc.latitude != 0.0 || loc.longitude != 0.0)) {
-                                latestLat = loc.latitude
-                                latestLng = loc.longitude
-                                return Pair(loc.latitude, loc.longitude)
+    private fun readCurrentLocation(ctx: Context): Pair<Double, Double>? {
+        if (!hasRiderLocationPermission(ctx)) return null
+        return try {
+            val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val providers = listOf(
+                LocationManager.GPS_PROVIDER,
+                LocationManager.NETWORK_PROVIDER,
+                LocationManager.PASSIVE_PROVIDER
+            )
+            var bestLoc: Location? = null
+            for (provider in providers) {
+                try {
+                    if (lm.isProviderEnabled(provider)) {
+                        val loc = lm.getLastKnownLocation(provider)
+                        if (loc != null && (loc.latitude != 0.0 || loc.longitude != 0.0)) {
+                            if (bestLoc == null || loc.time > bestLoc.time) {
+                                bestLoc = loc
                             }
                         }
-                    } catch (_: Exception) {
                     }
+                } catch (_: Exception) {
                 }
             }
+            if (bestLoc != null) {
+                latestLat = bestLoc.latitude
+                latestLng = bestLoc.longitude
+                return Pair(bestLoc.latitude, bestLoc.longitude)
+            }
+            val cachedLat = latestLat
+            val cachedLng = latestLng
+            if (cachedLat != null && cachedLng != null && (cachedLat != 0.0 || cachedLng != 0.0)) {
+                Pair(cachedLat, cachedLng)
+            } else {
+                null
+            }
         } catch (_: Exception) {
+            null
         }
-        return Pair(27.4728, 94.9120)
     }
 
     private fun deleteRiderFromAdmin(ctx: Context, targetRiderId: String, onDone: () -> Unit) {
@@ -680,7 +757,14 @@ class MainActivity : Activity() {
         val hasActiveSub = nowMillis < activeUntil
         val inTrial = !hasActiveSub && (nowMillis < trialEnd)
 
-        startLocationLoop(riderId, riderName, riderVehicleKey, riderPhotoB64, hardwareId)
+        activeLocationRiderId = riderId
+        activeLocationRiderName = riderName
+        activeLocationVehicleKey = riderVehicleKey
+        activeLocationPhotoB64 = riderPhotoB64
+        activeLocationHardwareId = hardwareId
+        if (hasRiderLocationPermission(ctx)) {
+            startLocationLoop(riderId, riderName, riderVehicleKey, riderPhotoB64, hardwareId)
+        }
 
         try {
             val rootRef = FirebaseDatabase.getInstance().reference.child("captain_smart_pro")
@@ -695,7 +779,6 @@ class MainActivity : Activity() {
                     "trialStart" to trialStart,
                     "activeUntil" to activeUntil,
                     "online" to true,
-                    "liveLocationOn" to true,
                     "lastSeen" to nowMillis
                 )
             )
@@ -911,7 +994,7 @@ class MainActivity : Activity() {
 
         val pickPhotoBtn = makeStyledButton(
             ctx,
-            if (selectedLang == "HI") "📷 राइडर फ़ोटो चुनें" else "📷 Choose Rider Photo",
+            if (selectedLang == "HI") "📷 प्रोफ़ाइल फ़ोटो चुनें" else "📷 Choose Profile Photo",
             cardElevated
         ).apply {
             textSize = 12f
@@ -919,14 +1002,14 @@ class MainActivity : Activity() {
                 pickPhotoFromGallery(ctx) { b64 ->
                     photoB64 = b64
                     decodeBase64Bitmap(b64)?.let { photoPreview.setImageBitmap(it) }
-                    Toast.makeText(ctx, "Photo selected", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, "Profile photo uploaded", Toast.LENGTH_SHORT).show()
                 }
             }
         }
 
         val saveBtn = makeStyledButton(
             ctx,
-            if (selectedLang == "HI") "✅ नया अकाउंट शुरू करें (लाइव लोकेशन चालू)" else "✅ Start Fresh Account (Live Location ON)",
+            if (selectedLang == "HI") "▶️ स्टार्ट करें" else "▶️ START",
             accentGreen
         ).apply {
             setOnClickListener {
@@ -941,20 +1024,14 @@ class MainActivity : Activity() {
                     Toast.makeText(ctx, "Please tap a vehicle icon first", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
-                liveLocationAutoEnabled = true
-                requestLocationPermissionIfNeeded(ctx)
-                registerLocationUpdates(ctx)
                 prefs.edit()
                     .putString("rider_full_name", fullName)
                     .putString("rider_mobile_id", mobileId)
                     .putString("rider_vehicle_type", chosenVehicle.key)
                     .putString("rider_photo_b64", photoB64)
-                    .putBoolean("live_location_enabled", true)
                     .putLong("trial_start_$mobileId", System.currentTimeMillis())
                     .remove("blocked_$mobileId")
                     .apply()
-                pushRiderLiveLocation(ctx, mobileId, fullName, chosenVehicle.key, photoB64, hardwareId)
-                Toast.makeText(ctx, "Live Location ON", Toast.LENGTH_SHORT).show()
                 loadAndStart(ctx, hardwareId)
             }
         }
@@ -1297,9 +1374,12 @@ class MainActivity : Activity() {
 
     private fun openSingleRiderActionsDialog(ctx: Context, entry: RiderEntry, refreshList: () -> Unit) {
         val vLabel = VehicleType.safeLabel(entry.vehicleTypeKey)
-        val latVal = entry.lat ?: 27.4728
-        val lngVal = entry.lng ?: 94.9120
-        val locText = "Live Location ON: ${String.format(Locale.US, "%.5f", latVal)}, ${String.format(Locale.US, "%.5f", lngVal)}"
+        val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
+        val locText = if (hasCoords) {
+            "Live Location: ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
+        } else {
+            "Live Location: Not shared yet"
+        }
 
         val options = arrayOf(
             "📞 Call Rider (${entry.mobile})",
@@ -1321,12 +1401,16 @@ class MainActivity : Activity() {
                     }
                     1 -> openAdminRiderChatDialog(ctx, entry.rId)
                     2 -> {
-                        val label = Uri.encode("${entry.name} ($vLabel)")
-                        val geoUri = Uri.parse("geo:$latVal,$lngVal?q=$latVal,$lngVal($label)")
-                        try {
-                            ctx.startActivity(Intent(Intent.ACTION_VIEW, geoUri))
-                        } catch (_: Exception) {
-                            Toast.makeText(ctx, locText, Toast.LENGTH_LONG).show()
+                        if (hasCoords) {
+                            val label = Uri.encode("${entry.name} ($vLabel)")
+                            val geoUri = Uri.parse("geo:${entry.lat},${entry.lng}?q=${entry.lat},${entry.lng}($label)")
+                            try {
+                                ctx.startActivity(Intent(Intent.ACTION_VIEW, geoUri))
+                            } catch (_: Exception) {
+                                Toast.makeText(ctx, locText, Toast.LENGTH_LONG).show()
+                            }
+                        } else {
+                            Toast.makeText(ctx, "Rider location not available right now", Toast.LENGTH_SHORT).show()
                         }
                     }
                     3 -> openSubscriptionManagerDialog(ctx, entry.rId)
@@ -1563,9 +1647,12 @@ class MainActivity : Activity() {
                     gravity = Gravity.CENTER
                     layoutParams = LinearLayout.LayoutParams(54, 54).apply { rightMargin = 8 }
                 }
-                val latVal = entry.lat ?: 27.4728
-                val lngVal = entry.lng ?: 94.9120
-                val locInfo = "\nLive Location ON: ${String.format(Locale.US, "%.4f", latVal)}, ${String.format(Locale.US, "%.4f", lngVal)}"
+                val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
+                val locInfo = if (hasCoords) {
+                    "\nLoc: ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
+                } else {
+                    "\nLoc: Not shared yet"
+                }
                 val detailsTv = TextView(ctx).apply {
                     text = "${entry.name} (${entry.mobile})\nVehicle: $vLabel • ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
                     textSize = 12f
@@ -2341,7 +2428,7 @@ class MainActivity : Activity() {
             setPadding(0, 4, 0, 4)
         })
         val fleetStateTv = TextView(ctx).apply {
-            text = if (isHi) "⏸️ स्टैंडबाय • लाइव लोकेशन चालू" else "⏸️ Standby • Live Location ON"
+            text = if (isHi) "⏸️ स्टैंडबाय (⋮ से इंजन एक्टिव करें)" else "⏸️ Standby (Open ⋮ to Activate Engine)"
             textSize = 12f
             setTextColor(Color.parseColor("#F87171"))
         }
@@ -2382,6 +2469,16 @@ class MainActivity : Activity() {
             Toast.makeText(ctx, if (isHi) "सेटिंग्स सेव हुईं" else "Preferences Saved", Toast.LENGTH_SHORT).show()
         }
 
+        val activateEngineNow: () -> Unit = {
+            isEngineActivated = true
+            startLocationLoop(riderId, riderName, prefs.getString("rider_vehicle_type", "bike"), prefs.getString("rider_photo_b64", "") ?: "", Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown")
+            pushRiderLiveLocation(ctx, riderId, riderName, prefs.getString("rider_vehicle_type", "bike"), prefs.getString("rider_photo_b64", "") ?: "", Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown")
+            fleetStateTv.text = if (isHi) "✅ इंजन एक्टिव • तैयार" else "✅ Engine Activated • Ready"
+            fleetStateTv.setTextColor(accentGold)
+            speakText(ctx, swSoundTts.isChecked, if (isHi) "इंजन चालू" else "Engine Activated")
+            Toast.makeText(ctx, if (isHi) "इंजन चालू" else "Engine Activated", Toast.LENGTH_SHORT).show()
+        }
+
         val autoAcceptBtn = makeStyledButton(
             ctx,
             if (isHi) "⚡ ऑटो एक्सेप्ट\nबंद" else "⚡ AUTO ACCEPT\nOFF",
@@ -2391,7 +2488,7 @@ class MainActivity : Activity() {
                 if (!isEngineActivated) {
                     Toast.makeText(
                         ctx,
-                        if (isHi) "पहले ऊपर ⋮ से एक्टिव करें" else "Open ⋮ on top to Activate first",
+                        if (isHi) "पहले ऊपर ⋮ से इंजन एक्टिव करें" else "Open ⋮ on top to Activate Engine first",
                         Toast.LENGTH_SHORT
                     ).show()
                     return@setOnClickListener
@@ -2436,14 +2533,14 @@ class MainActivity : Activity() {
             popup.setOnMenuItemClickListener { item ->
                 when (item.title.toString()) {
                     actLabel -> {
-                        isEngineActivated = !isEngineActivated
-                        if (isEngineActivated) {
-                            fleetStateTv.text = if (isHi) "✅ एक्टिव • तैयार" else "✅ Activated • Ready for Auto Accept"
-                            fleetStateTv.setTextColor(accentGold)
-                            speakText(ctx, swSoundTts.isChecked, if (isHi) "इंजन चालू" else "Activated")
-                            Toast.makeText(ctx, if (isHi) "इंजन चालू" else "Engine Activated", Toast.LENGTH_SHORT).show()
+                        if (!isEngineActivated) {
+                            requireLocationPermissionForEngine(ctx) {
+                                activateEngineNow()
+                            }
                         } else {
+                            isEngineActivated = false
                             isAutoAcceptEnabled = false
+                            locationHandler.removeCallbacks(locationRunnable)
                             autoAcceptBtn.text = if (isHi) "⚡ ऑटो एक्सेप्ट\nबंद" else "⚡ AUTO ACCEPT\nOFF"
                             autoAcceptBtn.background = make3dPill(Color.parseColor("#2A3954"), borderSlate, 14f)
                             fleetStateTv.text = if (isHi) "⏸️ स्टैंडबाय" else "⏸️ Standby (Deactivated)"
