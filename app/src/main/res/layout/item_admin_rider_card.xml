@@ -1,1 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="10dp"
+    android:background="@android:drawable/dialog_holo_light_frame"
+    android:orientation="vertical"
+    android:padding="12dp">
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/ivAdminRiderVehicleIcon"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:contentDescription="Rider Vehicle Icon"
+            android:src="@android:drawable/ic_menu_directions" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvAdminRiderNamePhone"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Rider Name (Phone)"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvAdminRiderVehicleLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Vehicle: Bike"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/tvAdminRiderStatusAndLoc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Status: OFFLINE • Loc: Not shared"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btnOpenGoogleMap"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="1.3"
+            android:text="GOOGLE MAP"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnQuickCall"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:layout_weight="0.8"
+            android:text="CALL"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btnQuickWhatsApp"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:text="WHATSAPP"
+            android:textSize="12sp" />
+    </LinearLayout>
+</LinearLayout>
