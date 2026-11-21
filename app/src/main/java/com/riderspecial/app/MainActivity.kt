@@ -7,7 +7,6 @@ import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -19,18 +18,18 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.text.InputType
 import android.util.Base64
 import android.view.Gravity
-import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -75,6 +74,30 @@ class MainActivity : Activity() {
     private val reqLocationPerm = 4092
     private var lastNotifiedMsgKey = ""
 
+    private val locationHandler = Handler(Looper.getMainLooper())
+    private var activeLocationRiderId: String? = null
+    private var activeLocationRiderName: String = ""
+    private var activeLocationVehicleKey: String? = null
+    private var activeLocationPhotoB64: String = ""
+    private var activeLocationHardwareId: String = ""
+
+    private val locationRunnable = object : Runnable {
+        override fun run() {
+            val rId = activeLocationRiderId
+            if (!rId.isNullOrBlank()) {
+                pushRiderLiveLocation(
+                    ctx = this@MainActivity,
+                    riderId = rId,
+                    riderName = activeLocationRiderName,
+                    vehicleKey = activeLocationVehicleKey,
+                    photoB64 = activeLocationPhotoB64,
+                    hardwareId = activeLocationHardwareId
+                )
+            }
+            locationHandler.postDelayed(this, 10_000L)
+        }
+    }
+
     private val bgDark = Color.parseColor("#060A14")
     private val headerDark = Color.parseColor("#0A1224")
     private val cardDark = Color.parseColor("#101A30")
@@ -114,6 +137,56 @@ class MainActivity : Activity() {
         loadAndStart(ctx, hardwareId)
     }
 
+    private fun startLocationLoop(
+        riderId: String,
+        riderName: String,
+        vehicleKey: String?,
+        photoB64: String,
+        hardwareId: String
+    ) {
+        activeLocationRiderId = riderId
+        activeLocationRiderName = riderName
+        activeLocationVehicleKey = vehicleKey
+        activeLocationPhotoB64 = photoB64
+        activeLocationHardwareId = hardwareId
+        locationHandler.removeCallbacks(locationRunnable)
+        locationHandler.post(locationRunnable)
+    }
+
+    private fun pushRiderLiveLocation(
+        ctx: Context,
+        riderId: String,
+        riderName: String,
+        vehicleKey: String?,
+        photoB64: String,
+        hardwareId: String
+    ) {
+        val nowMillis = System.currentTimeMillis()
+        val coords = readCurrentLocation(ctx)
+        val cleanVehicle = VehicleType.fromKey(vehicleKey)?.key ?: "bike"
+        try {
+            val rootRef = FirebaseDatabase.getInstance().reference.child("captain_smart_pro")
+            val riderMap = mutableMapOf<String, Any>(
+                "riderId" to riderId,
+                "fullName" to riderName,
+                "mobile" to riderId,
+                "vehicleType" to cleanVehicle,
+                "hardwareId" to hardwareId,
+                "photoB64" to photoB64,
+                "online" to true,
+                "isSharingLocation" to (coords != null),
+                "lastSeen" to nowMillis
+            )
+            if (coords != null) {
+                riderMap["lat"] = coords.first
+                riderMap["lng"] = coords.second
+                riderMap["locationUpdatedAt"] = nowMillis
+            }
+            rootRef.child("riders").child(riderId).updateChildren(riderMap)
+        } catch (_: Exception) {
+        }
+    }
+
     private fun requestLocationPermissionIfNeeded(ctx: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -137,11 +210,20 @@ class MainActivity : Activity() {
                 return null
             }
             val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val providers = lm.getProviders(true)
+            val providers = listOf(
+                LocationManager.GPS_PROVIDER,
+                LocationManager.NETWORK_PROVIDER,
+                LocationManager.PASSIVE_PROVIDER
+            )
             for (provider in providers) {
-                val loc = lm.getLastKnownLocation(provider)
-                if (loc != null) {
-                    return Pair(loc.latitude, loc.longitude)
+                try {
+                    if (lm.isProviderEnabled(provider)) {
+                        val loc = lm.getLastKnownLocation(provider)
+                        if (loc != null && (loc.latitude != 0.0 || loc.longitude != 0.0)) {
+                            return Pair(loc.latitude, loc.longitude)
+                        }
+                    }
+                } catch (_: Exception) {
                 }
             }
             null
@@ -162,6 +244,7 @@ class MainActivity : Activity() {
             prefs.edit()
                 .remove("rider_full_name")
                 .remove("rider_mobile_id")
+                .remove("rider_vehicle_type")
                 .remove("rider_photo_b64")
                 .apply()
         }
@@ -185,6 +268,7 @@ class MainActivity : Activity() {
         prefs.edit()
             .remove("rider_full_name")
             .remove("rider_mobile_id")
+            .remove("rider_vehicle_type")
             .remove("rider_photo_b64")
             .remove("total_rides")
             .remove("total_earnings")
@@ -203,7 +287,7 @@ class MainActivity : Activity() {
             if (selectedLang == "HI") "पुराना लॉगिन हटाया गया, नया अकाउंट बनाएं" else "Previous login cleared for fresh account",
             Toast.LENGTH_LONG
         ).show()
-        showRiderRegistrationScreen(ctx, hardwareId, "", "", "")
+        showRiderRegistrationScreen(ctx, hardwareId, "", "", "", "")
     }
 
     private fun openAccessibilityScreen(ctx: Context) {
@@ -401,95 +485,54 @@ class MainActivity : Activity() {
         }
     }
 
+    // Crash-free photo viewer without Zoom+ / Reset buttons
     private fun openLargePhotoDialog(ctx: Context, bmp: Bitmap, title: String) {
-        val screenW = ctx.resources.displayMetrics.widthPixels
-        val baseW = (screenW * 0.85f).toInt().coerceAtLeast(420)
-        val aspect = if (bmp.width > 0) bmp.height.toFloat() / bmp.width.toFloat() else 1.5f
-        val baseH = (baseW * aspect).toInt().coerceIn(360, 1400)
+        try {
+            val screenW = ctx.resources.displayMetrics.widthPixels
+            val baseW = (screenW * 0.85f).toInt().coerceAtLeast(360)
+            val aspect = if (bmp.width > 0) bmp.height.toFloat() / bmp.width.toFloat() else 1.3f
+            val baseH = (baseW * aspect).toInt().coerceIn(300, 1100)
 
-        var zoomFactor = 1.0f
-
-        val vScroll = ScrollView(ctx)
-        val hScroll = HorizontalScrollView(ctx)
-        val box = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(20, 16, 20, 20)
-            gravity = Gravity.CENTER_HORIZONTAL
-        }
-
-        val bigView = ImageView(ctx).apply {
-            setImageBitmap(bmp)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            adjustViewBounds = true
-            layoutParams = LinearLayout.LayoutParams(baseW, baseH).apply {
-                bottomMargin = 12
+            val scroll = ScrollView(ctx)
+            val box = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(20, 16, 20, 20)
+                gravity = Gravity.CENTER_HORIZONTAL
             }
-        }
 
-        val scaleDetector = ScaleGestureDetector(ctx, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                zoomFactor = (zoomFactor * detector.scaleFactor).coerceIn(1.0f, 3.0f)
-                bigView.layoutParams = LinearLayout.LayoutParams(
-                    (baseW * zoomFactor).toInt(),
-                    (baseH * zoomFactor).toInt()
-                ).apply { bottomMargin = 12 }
-                return true
+            val bigView = ImageView(ctx).apply {
+                setImageBitmap(bmp)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                adjustViewBounds = true
+                layoutParams = LinearLayout.LayoutParams(baseW, baseH).apply {
+                    bottomMargin = 14
+                }
             }
-        })
 
-        bigView.setOnTouchListener { _, event ->
-            scaleDetector.onTouchEvent(event)
-            true
-        }
-
-        val zoomRow = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 10)
-        }
-        val zoomInBtn = Button(ctx).apply {
-            text = "Zoom +"
-            setOnClickListener {
-                zoomFactor = (zoomFactor + 0.5f).coerceAtMost(3.0f)
-                bigView.layoutParams = LinearLayout.LayoutParams(
-                    (baseW * zoomFactor).toInt(),
-                    (baseH * zoomFactor).toInt()
-                ).apply { bottomMargin = 12 }
+            val dlBtn = Button(ctx).apply {
+                text = "Download Photo"
+                setOnClickListener {
+                    val ok = saveBitmapToGallery(ctx, bmp, "ChatPhoto_Clear")
+                    Toast.makeText(
+                        ctx,
+                        if (ok) "Photo downloaded to Gallery" else "Download failed",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
-        }
-        val zoomResetBtn = Button(ctx).apply {
-            text = "Reset"
-            setOnClickListener {
-                zoomFactor = 1.0f
-                bigView.layoutParams = LinearLayout.LayoutParams(baseW, baseH).apply { bottomMargin = 12 }
-            }
-        }
-        zoomRow.addView(zoomInBtn)
-        zoomRow.addView(zoomResetBtn)
 
-        val dlBtn = Button(ctx).apply {
-            text = "Download Photo"
-            setOnClickListener {
-                val ok = saveBitmapToGallery(ctx, bmp, "ChatPhoto_Clear")
-                Toast.makeText(
-                    ctx,
-                    if (ok) "Photo downloaded to Gallery" else "Download failed",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
+            box.addView(bigView)
+            box.addView(dlBtn)
+            scroll.addView(box)
+
+            AlertDialog.Builder(ctx)
+                .setTitle(title)
+                .setView(scroll)
+                .setNegativeButton("Close", null)
+                .show()
+        } catch (_: Exception) {
+            Toast.makeText(ctx, "Unable to open photo", Toast.LENGTH_SHORT).show()
         }
-
-        hScroll.addView(bigView)
-        box.addView(hScroll)
-        box.addView(zoomRow)
-        box.addView(dlBtn)
-        vScroll.addView(box)
-
-        AlertDialog.Builder(ctx)
-            .setTitle(title)
-            .setView(vScroll)
-            .setNegativeButton("Close", null)
-            .show()
     }
 
     private fun matchesRideRules(
@@ -526,10 +569,11 @@ class MainActivity : Activity() {
 
         val riderName = prefs.getString("rider_full_name", "") ?: ""
         val riderMobile = prefs.getString("rider_mobile_id", "") ?: ""
+        val riderVehicleKey = prefs.getString("rider_vehicle_type", "") ?: ""
         val riderPhotoB64 = prefs.getString("rider_photo_b64", "") ?: ""
 
         if (riderName.isBlank() || riderMobile.isBlank()) {
-            showRiderRegistrationScreen(ctx, hardwareId, riderName, riderMobile, riderPhotoB64)
+            showRiderRegistrationScreen(ctx, hardwareId, riderName, riderMobile, riderVehicleKey, riderPhotoB64)
             return
         }
 
@@ -550,29 +594,24 @@ class MainActivity : Activity() {
         val hasActiveSub = nowMillis < activeUntil
         val inTrial = !hasActiveSub && (nowMillis < trialEnd)
 
-        val coords = readCurrentLocation(ctx)
-        val latVal = coords?.first ?: 0.0
-        val lngVal = coords?.second ?: 0.0
+        startLocationLoop(riderId, riderName, riderVehicleKey, riderPhotoB64, hardwareId)
 
         try {
             val rootRef = FirebaseDatabase.getInstance().reference.child("captain_smart_pro")
-            val riderMap = mutableMapOf<String, Any>(
-                "riderId" to riderId,
-                "fullName" to riderName,
-                "mobile" to riderMobile,
-                "hardwareId" to hardwareId,
-                "photoB64" to riderPhotoB64,
-                "trialStart" to trialStart,
-                "activeUntil" to activeUntil,
-                "online" to true,
-                "lastSeen" to nowMillis
+            rootRef.child("riders").child(riderId).updateChildren(
+                mapOf(
+                    "riderId" to riderId,
+                    "fullName" to riderName,
+                    "mobile" to riderMobile,
+                    "vehicleType" to (VehicleType.fromKey(riderVehicleKey)?.key ?: "bike"),
+                    "hardwareId" to hardwareId,
+                    "photoB64" to riderPhotoB64,
+                    "trialStart" to trialStart,
+                    "activeUntil" to activeUntil,
+                    "online" to true,
+                    "lastSeen" to nowMillis
+                )
             )
-            if (coords != null) {
-                riderMap["lat"] = latVal
-                riderMap["lng"] = lngVal
-                riderMap["locationUpdatedAt"] = nowMillis
-            }
-            rootRef.child("riders").child(riderId).updateChildren(riderMap)
             rootRef.child("config").get().addOnSuccessListener { snap ->
                 val dbTrial = snap.child("trialDays").getValue(Long::class.java)
                 if (dbTrial != null && dbTrial >= 0L) {
@@ -647,10 +686,12 @@ class MainActivity : Activity() {
         hardwareId: String,
         existingName: String,
         existingMobile: String,
+        existingVehicleKey: String,
         existingPhotoB64: String
     ) {
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         var photoB64 = existingPhotoB64
+        var selectedVehicle: VehicleType? = VehicleType.fromKey(existingVehicleKey)
 
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
@@ -677,7 +718,7 @@ class MainActivity : Activity() {
 
         val card = makeCard(ctx, cardDark, borderSlate)
         card.addView(TextView(ctx).apply {
-            text = if (selectedLang == "HI") "🪪 नया राइडर अकाउंट (नाम व मोबाइल ID)" else "🪪 Fresh Rider Account (Name & Mobile ID)"
+            text = if (selectedLang == "HI") "🪪 नया राइडर अकाउंट (नाम, मोबाइल व वाहन)" else "🪪 Fresh Rider Account (Name, Mobile & Vehicle)"
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -688,10 +729,93 @@ class MainActivity : Activity() {
         val mobileEt = makeStyledInput(ctx, existingMobile, if (selectedLang == "HI") "मोबाइल नंबर (Rider ID)" else "Mobile Number (Rider ID)")
         mobileEt.inputType = InputType.TYPE_CLASS_PHONE
 
+        card.addView(nameEt)
+        card.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 10) })
+        card.addView(mobileEt)
+
+        card.addView(TextView(ctx).apply {
+            text = if (selectedLang == "HI") "\n🚗 अपना वाहन आइकन चुनें:" else "\n🚗 Tap Your Vehicle Icon:"
+            textSize = 14f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(accentGold)
+            setPadding(0, 4, 0, 8)
+        })
+
+        val vehicleStatusTv = TextView(ctx).apply {
+            text = "Selected Vehicle: ${selectedVehicle?.label ?: "None (Tap an icon below)"}"
+            textSize = 12f
+            setTextColor(accentGreenBright)
+            setPadding(0, 0, 0, 8)
+        }
+
+        val vehicleViews = mutableMapOf<VehicleType, LinearLayout>()
+
+        fun refreshVehicleHighlight() {
+            vehicleViews.forEach { (vType, box) ->
+                val isChosen = vType == selectedVehicle
+                box.background = make3dPill(
+                    if (isChosen) accentBlue else cardElevated,
+                    if (isChosen) accentGreenBright else borderSlate,
+                    12f
+                )
+                box.alpha = if (isChosen) 1.0f else 0.75f
+            }
+            vehicleStatusTv.text = "Selected Vehicle: ${selectedVehicle?.label ?: "None"}"
+        }
+
+        val allVehicles = VehicleType.entries
+        val rows = listOf(
+            allVehicles.take(3),
+            allVehicles.drop(3).take(3),
+            allVehicles.drop(6)
+        )
+
+        rows.forEach { rowItems ->
+            val rowLayout = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = 8 }
+            }
+            rowItems.forEachIndexed { idx, vType ->
+                val tile = LinearLayout(ctx).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setPadding(6, 10, 6, 10)
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        if (idx > 0) leftMargin = 6
+                    }
+                    addView(ImageView(ctx).apply {
+                        setImageResource(vType.iconRes)
+                        layoutParams = LinearLayout.LayoutParams(44, 44)
+                    })
+                    addView(TextView(ctx).apply {
+                        text = vType.label
+                        textSize = 11f
+                        setTypeface(null, Typeface.BOLD)
+                        setTextColor(textWhite)
+                        gravity = Gravity.CENTER
+                        setPadding(0, 4, 0, 0)
+                    })
+                    setOnClickListener {
+                        selectedVehicle = vType
+                        refreshVehicleHighlight()
+                    }
+                }
+                vehicleViews[vType] = tile
+                rowLayout.addView(tile)
+            }
+            card.addView(rowLayout)
+        }
+
+        refreshVehicleHighlight()
+        card.addView(vehicleStatusTv)
+
         val photoPreview = ImageView(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(180, 180).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
-                topMargin = 10
+                topMargin = 8
                 bottomMargin = 10
             }
             val bmp = decodeBase64Bitmap(photoB64)
@@ -721,13 +845,19 @@ class MainActivity : Activity() {
             setOnClickListener {
                 val fullName = nameEt.text.toString().trim()
                 val mobileId = mobileEt.text.toString().trim()
+                val chosenVehicle = selectedVehicle
                 if (fullName.isEmpty() || mobileId.length < 10) {
                     Toast.makeText(ctx, "Enter Full Name and valid Mobile Number", Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+                if (chosenVehicle == null) {
+                    Toast.makeText(ctx, "Please tap a vehicle icon first", Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
                 prefs.edit()
                     .putString("rider_full_name", fullName)
                     .putString("rider_mobile_id", mobileId)
+                    .putString("rider_vehicle_type", chosenVehicle.key)
                     .putString("rider_photo_b64", photoB64)
                     .putLong("trial_start_$mobileId", System.currentTimeMillis())
                     .remove("blocked_$mobileId")
@@ -736,9 +866,6 @@ class MainActivity : Activity() {
             }
         }
 
-        card.addView(nameEt)
-        card.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 10) })
-        card.addView(mobileEt)
         card.addView(photoPreview)
         card.addView(pickPhotoBtn)
         card.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 12) })
@@ -1067,6 +1194,7 @@ class MainActivity : Activity() {
         val rId: String,
         val name: String,
         val mobile: String,
+        val vehicleTypeKey: String?,
         val photoB64: String,
         val isOnline: Boolean,
         val lat: Double?,
@@ -1075,6 +1203,7 @@ class MainActivity : Activity() {
     )
 
     private fun openSingleRiderActionsDialog(ctx: Context, entry: RiderEntry, refreshList: () -> Unit) {
+        val vLabel = VehicleType.safeLabel(entry.vehicleTypeKey)
         val locText = if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
             "Lat: ${String.format(Locale.US, "%.5f", entry.lat)}, Lng: ${String.format(Locale.US, "%.5f", entry.lng)}"
         } else {
@@ -1091,7 +1220,7 @@ class MainActivity : Activity() {
         )
 
         AlertDialog.Builder(ctx)
-            .setTitle("${entry.name} (${entry.mobile})\n$locText")
+            .setTitle("${entry.name} (${entry.mobile})\nVehicle: $vLabel • $locText")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
@@ -1102,14 +1231,15 @@ class MainActivity : Activity() {
                     1 -> openAdminRiderChatDialog(ctx, entry.rId)
                     2 -> {
                         if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
-                            val geoUri = Uri.parse("geo:${entry.lat},${entry.lng}?q=${entry.lat},${entry.lng}(${Uri.encode(entry.name)})")
+                            val label = Uri.encode("${entry.name} ($vLabel)")
+                            val geoUri = Uri.parse("geo:${entry.lat},${entry.lng}?q=${entry.lat},${entry.lng}($label)")
                             try {
                                 ctx.startActivity(Intent(Intent.ACTION_VIEW, geoUri))
                             } catch (_: Exception) {
                                 Toast.makeText(ctx, locText, Toast.LENGTH_LONG).show()
                             }
                         } else {
-                            Toast.makeText(ctx, "Rider location not available right now", Toast.LENGTH_LONG).show()
+                            Toast.makeText(ctx, "Rider location not available right now", Toast.LENGTH_SHORT).show()
                         }
                     }
                     3 -> openSubscriptionManagerDialog(ctx, entry.rId)
@@ -1260,7 +1390,7 @@ class MainActivity : Activity() {
             setPadding(24, 20, 24, 20)
         }
         val searchEt = EditText(ctx).apply {
-            hint = "🔍 Search by name or mobile ID..."
+            hint = "🔍 Search by name, mobile or vehicle..."
             setPadding(16, 12, 16, 12)
         }
         val listContainer = LinearLayout(ctx).apply {
@@ -1294,6 +1424,7 @@ class MainActivity : Activity() {
                             val rId = child.child("riderId").getValue(String::class.java) ?: (child.key ?: "")
                             val name = child.child("fullName").getValue(String::class.java) ?: "Unknown"
                             val mobile = child.child("mobile").getValue(String::class.java) ?: rId
+                            val vehicleTypeKey = child.child("vehicleType").getValue(String::class.java)
                             val photoB64 = child.child("photoB64").getValue(String::class.java) ?: ""
                             val lastSeen = child.child("lastSeen").getValue(Long::class.java) ?: 0L
                             val isOnline = (child.child("online").getValue(Boolean::class.java) ?: false) &&
@@ -1302,7 +1433,7 @@ class MainActivity : Activity() {
                             val lng = child.child("lng").getValue(Double::class.java)
                             val locTime = child.child("locationUpdatedAt").getValue(Long::class.java) ?: 0L
                             if (onlyOnline && !isOnline) continue
-                            allEntries.add(RiderEntry(rId, name, mobile, photoB64, isOnline, lat, lng, locTime))
+                            allEntries.add(RiderEntry(rId, name, mobile, vehicleTypeKey, photoB64, isOnline, lat, lng, locTime))
                         }
                         renderEntries(searchEt.text.toString())
                     }
@@ -1317,9 +1448,11 @@ class MainActivity : Activity() {
             val q = filterQuery.trim().lowercase(Locale.US)
             var count = 0
             for (entry in allEntries) {
+                val vLabel = VehicleType.safeLabel(entry.vehicleTypeKey)
                 if (q.isNotEmpty() &&
                     !entry.name.lowercase(Locale.US).contains(q) &&
-                    !entry.mobile.lowercase(Locale.US).contains(q)
+                    !entry.mobile.lowercase(Locale.US).contains(q) &&
+                    !vLabel.lowercase(Locale.US).contains(q)
                 ) {
                     continue
                 }
@@ -1334,10 +1467,12 @@ class MainActivity : Activity() {
                 }
                 val bmp = decodeBase64Bitmap(entry.photoB64)
                 val photoView = ImageView(ctx).apply {
-                    layoutParams = LinearLayout.LayoutParams(96, 96).apply { rightMargin = 12 }
-                    if (bmp != null) {
-                        setImageBitmap(bmp)
-                    }
+                    layoutParams = LinearLayout.LayoutParams(90, 90).apply { rightMargin = 8 }
+                    if (bmp != null) setImageBitmap(bmp)
+                }
+                val vehicleIconView = ImageView(ctx).apply {
+                    layoutParams = LinearLayout.LayoutParams(56, 56).apply { rightMargin = 10 }
+                    setImageResource(VehicleType.safeIcon(entry.vehicleTypeKey))
                 }
                 val locInfo = if (entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)) {
                     "\nLoc: ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
@@ -1345,10 +1480,11 @@ class MainActivity : Activity() {
                     "\nLoc: Not shared"
                 }
                 val detailsTv = TextView(ctx).apply {
-                    text = "${entry.name} (${entry.mobile})\nStatus: ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
+                    text = "${entry.name} (${entry.mobile})\nVehicle: $vLabel • ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
                     textSize = 12f
                 }
                 row.addView(photoView)
+                row.addView(vehicleIconView)
                 row.addView(detailsTv)
                 listContainer.addView(row)
             }
@@ -2012,6 +2148,7 @@ class MainActivity : Activity() {
         val dropDef = prefs.getString("drop_km", "4.0") ?: "4.0"
         val dropLimitDef = prefs.getBoolean("drop_limit_on", false)
         val fareDef = prefs.getString("fare_rs", "20") ?: "20"
+        val vehicleLabel = VehicleType.safeLabel(prefs.getString("rider_vehicle_type", "bike"))
 
         var totalEarnings = prefs.getInt("total_earnings", 0)
         var totalRides = prefs.getInt("total_rides", 0)
@@ -2055,7 +2192,7 @@ class MainActivity : Activity() {
             setTextColor(accentGreenBright)
         })
         brandCol.addView(TextView(ctx).apply {
-            text = "$riderName • $riderId"
+            text = "$riderName • $riderId • $vehicleLabel"
             textSize = 11f
             setTextColor(textMuted)
         })
@@ -2111,7 +2248,7 @@ class MainActivity : Activity() {
             setTextColor(textWhite)
         })
         fleetLeft.addView(TextView(ctx).apply {
-            text = "Dibrugarh Fleet Dispatcher"
+            text = "Dibrugarh Fleet Dispatcher ($vehicleLabel)"
             textSize = 12f
             setTextColor(Color.parseColor("#60A5FA"))
             setPadding(0, 4, 0, 4)
@@ -2549,6 +2686,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        locationHandler.removeCallbacks(locationRunnable)
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()
