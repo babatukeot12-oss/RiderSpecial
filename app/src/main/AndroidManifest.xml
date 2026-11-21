@@ -1,20 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.riderspecial.app">
 
-    <!-- 1. इंटरनेट की एक्सेस व चालू करने की अनुमति -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
-        android:icon="@drawable/rider_special_520x500"
-        android:roundIcon="@drawable/rider_special_520x500"
         android:allowBackup="true"
+        android:icon="@drawable/rider_special_520x520"
+        android:roundIcon="@drawable/rider_special_520x520"
         android:label="Captain Smart - Rider Special"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
-        <!-- 2. ऐप की मुख्य स्क्रीन (Login, Rider और Admin डैशबोर्ड) -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -24,7 +25,6 @@
             </intent-filter>
         </activity>
 
-        <!-- 3. 0.00s ऑटो-असेप्ट की Accessibility सर्विस -->
         <service
             android:name=".RideAutoAcceptService"
             android:exported="true"
@@ -38,4 +38,5 @@
         </service>
 
     </application>
+
 </manifest>
