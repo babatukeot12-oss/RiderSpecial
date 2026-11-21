@@ -7,7 +7,6 @@ import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -80,6 +79,7 @@ class MainActivity : Activity() {
 
     private var latestLat: Double? = null
     private var latestLng: Double? = null
+    private var lastMovementText: String = "Live"
 
     private val locationHandler = Handler(Looper.getMainLooper())
     private var activeLocationRiderId: String? = null
@@ -91,8 +91,17 @@ class MainActivity : Activity() {
     private val gpsListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
             if (location.latitude != 0.0 || location.longitude != 0.0) {
+                val prevLat = latestLat
+                val prevLng = latestLng
                 latestLat = location.latitude
                 latestLng = location.longitude
+                lastMovementText = if (prevLat != null && prevLng != null) {
+                    val moved = FloatArray(1)
+                    Location.distanceBetween(prevLat, prevLng, location.latitude, location.longitude, moved)
+                    if (moved[0] > 5f) "Moving" else "Stopped"
+                } else {
+                    "Live"
+                }
                 val rId = activeLocationRiderId
                 if (!rId.isNullOrBlank() && hasRiderLocationPermission(this@MainActivity)) {
                     pushRiderLiveLocation(
@@ -125,7 +134,7 @@ class MainActivity : Activity() {
                     hardwareId = activeLocationHardwareId
                 )
             }
-            locationHandler.postDelayed(this, 6_000L)
+            locationHandler.postDelayed(this, 4_000L)
         }
     }
 
@@ -167,10 +176,16 @@ class MainActivity : Activity() {
         loadAndStart(ctx, hardwareId)
     }
 
+    private fun countWords(text: String): Int {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return 0
+        return trimmed.split(Regex("\\s+")).size
+    }
+
     private fun hasRiderLocationPermission(ctx: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            ctx.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == 0 ||
+                ctx.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == 0
         } else {
             true
         }
@@ -306,7 +321,7 @@ class MainActivity : Activity() {
             for (provider in providers) {
                 try {
                     if (lm.isProviderEnabled(provider)) {
-                        lm.requestLocationUpdates(provider, 3000L, 0f, gpsListener, Looper.getMainLooper())
+                        lm.requestLocationUpdates(provider, 2000L, 0f, gpsListener, Looper.getMainLooper())
                         val last = lm.getLastKnownLocation(provider)
                         if (last != null && (last.latitude != 0.0 || last.longitude != 0.0)) {
                             latestLat = last.latitude
@@ -343,6 +358,7 @@ class MainActivity : Activity() {
                 "photoB64" to photoB64,
                 "online" to true,
                 "liveLocationOn" to true,
+                "movementStatus" to lastMovementText,
                 "isSharingLocation" to (coords != null),
                 "lastSeen" to nowMillis
             )
@@ -705,12 +721,15 @@ class MainActivity : Activity() {
         maxPickupKm: Float,
         maxDropKm: Float,
         dropLimitEnabled: Boolean,
-        minFareRs: Int
+        minFareRs: Int,
+        parcelModeOn: Boolean,
+        isParcelOrder: Boolean = true
     ): Boolean {
+        val parcelOk = if (parcelModeOn) isParcelOrder else true
         val pickupOk = ridePickupKm <= maxPickupKm
         val dropOk = if (dropLimitEnabled) (rideDropKm <= maxDropKm) else true
         val fareOk = rideFareRs >= minFareRs
-        return pickupOk && dropOk && fareOk
+        return parcelOk && pickupOk && dropOk && fareOk
     }
 
     private fun loadAndStart(ctx: Context, hardwareId: String) {
@@ -824,6 +843,8 @@ class MainActivity : Activity() {
     }
 
     private fun showBlockedScreen(ctx: Context, riderId: String, riderName: String) {
+        val isHi = selectedLang == "HI"
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
             setPadding(22, 72, 22, 116)
@@ -834,18 +855,131 @@ class MainActivity : Activity() {
             setOnClickListener { promptAdminPassport(ctx, riderId) }
         })
         col.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 14) })
+
         val card = makeCard(ctx, cardDark, accentRed)
         card.addView(TextView(ctx).apply {
-            text = "🚫 Account Paused by Admin"
+            text = if (isHi) "🚫 आपकी आईडी ब्लॉक है" else "🚫 Account Paused by Admin"
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.parseColor("#F87171"))
         })
         card.addView(TextView(ctx).apply {
-            text = "\n$riderName ($riderId)\nContact Admin for support."
+            text = if (isHi)
+                "\n$riderName ($riderId)\nआईडी खुलवाने के लिए नीचे 200 शब्दों में अपनी समस्या लिखकर एडमिन को रिक्वेस्ट भेजें।"
+                else
+                "\n$riderName ($riderId)\nWrite your issue (up to 200 words) below to send an unblock request to Admin."
             textSize = 13f
             setTextColor(textWhite)
         })
+
+        val wordCountTv = TextView(ctx).apply {
+            text = if (isHi) "शब्द: 0 / 200" else "Words: 0 / 200"
+            textSize = 12f
+            setTextColor(accentGold)
+            setPadding(0, 12, 0, 6)
+        }
+
+        val reqEt = EditText(ctx).apply {
+            hint = if (isHi)
+                "यहाँ अपनी समस्या लिखें (अधिकतम 200 शब्द): प्लीज़ मेरा आईडी ओपन कर दीजिए..."
+                else
+                "Write your problem here (max 200 words): Please open my ID..."
+            setTextColor(textWhite)
+            setHintTextColor(textMuted)
+            textSize = 13f
+            minLines = 4
+            gravity = Gravity.TOP or Gravity.START
+            background = make3dPill(cardElevated, borderSlate, 14f)
+            setPadding(14, 12, 14, 12)
+        }
+
+        val sentHistoryTv = TextView(ctx).apply {
+            text = prefs.getString("unblock_req_$riderId", "") ?: ""
+            textSize = 12f
+            setTextColor(accentGreenBright)
+            setPadding(0, 10, 0, 6)
+        }
+
+        reqEt.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                val words = countWords(s?.toString() ?: "")
+                wordCountTv.text = if (isHi) "शब्द: $words / 200" else "Words: $words / 200"
+                wordCountTv.setTextColor(if (words > 200) Color.parseColor("#F87171") else accentGold)
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
+
+        val sendReqBtn = makeStyledButton(
+            ctx,
+            if (isHi) "📩 आईडी खोलने की रिक्वेस्ट भेजें" else "📩 Send Unblock Request",
+            accentGreen
+        ).apply {
+            setOnClickListener {
+                val msg = reqEt.text.toString().trim()
+                if (msg.isEmpty()) {
+                    Toast.makeText(
+                        ctx,
+                        if (isHi) "कृपया पहले अपनी समस्या लिखें" else "Please write your message first",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@setOnClickListener
+                }
+                val words = countWords(msg)
+                if (words > 200) {
+                    Toast.makeText(
+                        ctx,
+                        if (isHi) "कृपया 200 शब्दों के अंदर लिखें (अभी $words शब्द हैं)" else "Please keep within 200 words (currently $words words)",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@setOnClickListener
+                }
+
+                val formattedReq = "[Unblock Request - $words words]: $msg"
+                val prevHist = prefs.getString("unblock_req_$riderId", "") ?: ""
+                val updatedHist = (prevHist + "\n• $formattedReq").trim()
+                prefs.edit().putString("unblock_req_$riderId", updatedHist).apply()
+                sentHistoryTv.text = updatedHist
+
+                try {
+                    val chatRef = FirebaseDatabase.getInstance().reference
+                        .child("captain_smart_pro")
+                        .child("chats")
+                        .child(riderId)
+                    val key = chatRef.push().key
+                    if (key != null) {
+                        chatRef.child(key).setValue(
+                            mapOf(
+                                "sender" to "$riderName ($riderId) [BLOCKED]",
+                                "message" to formattedReq,
+                                "photoB64" to "",
+                                "time" to System.currentTimeMillis()
+                            )
+                        )
+                    }
+                    FirebaseDatabase.getInstance().reference
+                        .child("captain_smart_pro")
+                        .child("riders")
+                        .child(riderId)
+                        .child("unblockRequest")
+                        .setValue(formattedReq)
+                } catch (_: Exception) {
+                }
+
+                reqEt.setText("")
+                Toast.makeText(
+                    ctx,
+                    if (isHi) "आपकी रिक्वेस्ट एडमिन को भेज दी गई है" else "Request sent to Admin",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+
+        card.addView(wordCountTv)
+        card.addView(reqEt)
+        card.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 10) })
+        card.addView(sendReqBtn)
+        card.addView(sentHistoryTv)
         col.addView(card)
         scroll.addView(col)
         setContentView(scroll)
@@ -1369,16 +1503,17 @@ class MainActivity : Activity() {
         val isOnline: Boolean,
         val lat: Double?,
         val lng: Double?,
-        val locTime: Long
+        val locTime: Long,
+        val movementStatus: String = "Live"
     )
 
     private fun openSingleRiderActionsDialog(ctx: Context, entry: RiderEntry, refreshList: () -> Unit) {
         val vLabel = VehicleType.safeLabel(entry.vehicleTypeKey)
         val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
         val locText = if (hasCoords) {
-            "Live Location: ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
+            "Live (${entry.movementStatus}): ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
         } else {
-            "Live Location: Not shared yet"
+            "Live Location: Waiting for GPS"
         }
 
         val options = arrayOf(
@@ -1603,8 +1738,11 @@ class MainActivity : Activity() {
                             val lat = child.child("lat").getValue(Double::class.java)
                             val lng = child.child("lng").getValue(Double::class.java)
                             val locTime = child.child("locationUpdatedAt").getValue(Long::class.java) ?: 0L
+                            val moveStatus = child.child("movementStatus").getValue(String::class.java) ?: "Live"
                             if (onlyOnline && !isOnline) continue
-                            allEntries.add(RiderEntry(rId, name, mobile, vehicleTypeKey, photoB64, isOnline, lat, lng, locTime))
+                            allEntries.add(
+                                RiderEntry(rId, name, mobile, vehicleTypeKey, photoB64, isOnline, lat, lng, locTime, moveStatus)
+                            )
                         }
                         renderEntries(searchEt.text.toString())
                     }
@@ -1649,9 +1787,9 @@ class MainActivity : Activity() {
                 }
                 val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
                 val locInfo = if (hasCoords) {
-                    "\nLoc: ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
+                    "\nLive (${entry.movementStatus}): ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
                 } else {
-                    "\nLoc: Not shared yet"
+                    "\nLive Location: Waiting for GPS"
                 }
                 val detailsTv = TextView(ctx).apply {
                     text = "${entry.name} (${entry.mobile})\nVehicle: $vLabel • ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
@@ -2330,6 +2468,7 @@ class MainActivity : Activity() {
 
         var isEngineActivated = false
         var isAutoAcceptEnabled = false
+        var isParcelModeOn = prefs.getBoolean("parcel_mode_on", false)
 
         val root = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -2460,6 +2599,7 @@ class MainActivity : Activity() {
                 .putString("drop_km", dropEt.text.toString().trim())
                 .putBoolean("drop_limit_on", swDropLimit.isChecked)
                 .putString("fare_rs", amountEt.text.toString().trim())
+                .putBoolean("parcel_mode_on", isParcelModeOn)
                 .apply()
             speakText(
                 ctx,
@@ -2471,8 +2611,21 @@ class MainActivity : Activity() {
 
         val activateEngineNow: () -> Unit = {
             isEngineActivated = true
-            startLocationLoop(riderId, riderName, prefs.getString("rider_vehicle_type", "bike"), prefs.getString("rider_photo_b64", "") ?: "", Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown")
-            pushRiderLiveLocation(ctx, riderId, riderName, prefs.getString("rider_vehicle_type", "bike"), prefs.getString("rider_photo_b64", "") ?: "", Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown")
+            startLocationLoop(
+                riderId,
+                riderName,
+                prefs.getString("rider_vehicle_type", "bike"),
+                prefs.getString("rider_photo_b64", "") ?: "",
+                Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
+            )
+            pushRiderLiveLocation(
+                ctx,
+                riderId,
+                riderName,
+                prefs.getString("rider_vehicle_type", "bike"),
+                prefs.getString("rider_photo_b64", "") ?: "",
+                Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
+            )
             fleetStateTv.text = if (isHi) "✅ इंजन एक्टिव • तैयार" else "✅ Engine Activated • Ready"
             fleetStateTv.setTextColor(accentGold)
             speakText(ctx, swSoundTts.isChecked, if (isHi) "इंजन चालू" else "Engine Activated")
@@ -2572,6 +2725,36 @@ class MainActivity : Activity() {
         fleetCard.addView(statsSummaryTv)
         homeLayout.addView(fleetCard)
 
+        val parcelToggleBtn = makeStyledButton(
+            ctx,
+            if (isParcelModeOn) {
+                if (isHi) "📦 पार्सल: ON (केवल पार्सल एक्सेप्ट)" else "📦 PARCEL: ON (Parcel Only)"
+            } else {
+                if (isHi) "📦 पार्सल: OFF" else "📦 PARCEL: OFF"
+            },
+            if (isParcelModeOn) accentGreen else accentPurple
+        ).apply {
+            textSize = 11f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                leftMargin = 6
+            }
+            setOnClickListener {
+                isParcelModeOn = !isParcelModeOn
+                prefs.edit().putBoolean("parcel_mode_on", isParcelModeOn).apply()
+                if (isParcelModeOn) {
+                    text = if (isHi) "📦 पार्सल: ON (केवल पार्सल एक्सेप्ट)" else "📦 PARCEL: ON (Parcel Only)"
+                    background = make3dPill(accentGreen, accentGreenBright, 16f)
+                    speakText(ctx, swSoundTts.isChecked, if (isHi) "पार्सल मोड चालू, केवल पार्सल एक्सेप्ट होगा" else "Parcel mode ON, only parcel orders accepted")
+                    Toast.makeText(ctx, if (isHi) "पार्सल ON • केवल पार्सल एक्सेप्ट होगा" else "Parcel ON • Only Parcel Accepted", Toast.LENGTH_SHORT).show()
+                } else {
+                    text = if (isHi) "📦 पार्सल: OFF" else "📦 PARCEL: OFF"
+                    background = make3dPill(accentPurple, Color.parseColor("#93C5FD"), 16f)
+                    speakText(ctx, swSoundTts.isChecked, if (isHi) "पार्सल मोड बंद" else "Parcel mode OFF")
+                    Toast.makeText(ctx, if (isHi) "पार्सल OFF" else "Parcel OFF", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
         val row1 = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -2593,8 +2776,12 @@ class MainActivity : Activity() {
                 val dKm = dropEt.text.toString().trim().toFloatOrNull() ?: 4.0f
                 val minRs = amountEt.text.toString().trim().toIntOrNull() ?: 20
 
-                if (!matchesRideRules(maxP, dKm, minRs, maxP, dKm, swDropLimit.isChecked, minRs)) {
-                    Toast.makeText(ctx, "Ride did not match rules", Toast.LENGTH_SHORT).show()
+                if (!matchesRideRules(maxP, dKm, minRs, maxP, dKm, swDropLimit.isChecked, minRs, isParcelModeOn, true)) {
+                    Toast.makeText(
+                        ctx,
+                        if (isParcelModeOn) "केवल पार्सल ऑर्डर स्वीकार होंगे" else "Ride did not match rules",
+                        Toast.LENGTH_SHORT
+                    ).show()
                     return@setOnClickListener
                 }
 
@@ -2626,20 +2813,7 @@ class MainActivity : Activity() {
                 ).show()
             }
         })
-        row1.addView(makeStyledButton(
-            ctx,
-            if (isHi) "📋 ऑर्डर स्प्लिट फ़ॉर्म" else "📋 ORDER SPLIT FORM",
-            accentPurple
-        ).apply {
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = 6
-            }
-            setOnClickListener {
-                speakText(ctx, swSoundTts.isChecked, "Order Split Form Ready")
-                Toast.makeText(ctx, "Order Split Form Ready", Toast.LENGTH_SHORT).show()
-            }
-        })
+        row1.addView(parcelToggleBtn)
         homeLayout.addView(row1)
 
         val rulesCard = makeCard(ctx, cardDark, borderSlate)
