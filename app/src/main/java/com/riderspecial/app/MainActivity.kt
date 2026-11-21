@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -485,7 +486,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // Crash-free photo viewer without Zoom+ / Reset buttons
     private fun openLargePhotoDialog(ctx: Context, bmp: Bitmap, title: String) {
         try {
             val screenW = ctx.resources.displayMetrics.widthPixels
