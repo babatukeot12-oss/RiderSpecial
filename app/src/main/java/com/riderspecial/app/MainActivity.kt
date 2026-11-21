@@ -133,7 +133,7 @@ class MainActivity : Activity() {
                     hardwareId = activeLocationHardwareId
                 )
             }
-            locationHandler.postDelayed(this, 10_000L)
+            locationHandler.postDelayed(this, 8_000L)
         }
     }
 
@@ -353,20 +353,19 @@ class MainActivity : Activity() {
         try {
             if (!hasRiderLocationPermission(ctx) || !isDeviceLocationEnabled(ctx)) return
             val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val providers = listOf(
-                LocationManager.GPS_PROVIDER,
-                LocationManager.NETWORK_PROVIDER
-            )
-            for (provider in providers) {
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 try {
-                    if (lm.isProviderEnabled(provider)) {
-                        lm.requestLocationUpdates(provider, 10_000L, 10f, gpsListener, Looper.getMainLooper())
-                        val last = lm.getLastKnownLocation(provider)
-                        if (last != null && !isLocationMocked(last) && (last.latitude != 0.0 || last.longitude != 0.0)) {
-                            latestLat = last.latitude
-                            latestLng = last.longitude
-                        }
+                    lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 4_000L, 2f, gpsListener, Looper.getMainLooper())
+                    val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    if (gpsLoc != null && !isLocationMocked(gpsLoc) && (gpsLoc.latitude != 0.0 || gpsLoc.longitude != 0.0)) {
+                        latestLat = gpsLoc.latitude
+                        latestLng = gpsLoc.longitude
                     }
+                } catch (_: Exception) {
+                }
+            } else if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                try {
+                    lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 6_000L, 5f, gpsListener, Looper.getMainLooper())
                 } catch (_: Exception) {
                 }
             }
@@ -415,29 +414,18 @@ class MainActivity : Activity() {
         if (!hasRiderLocationPermission(ctx) || !isDeviceLocationEnabled(ctx)) return null
         return try {
             val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val providers = listOf(
-                LocationManager.GPS_PROVIDER,
-                LocationManager.NETWORK_PROVIDER,
-                LocationManager.PASSIVE_PROVIDER
-            )
-            var bestLoc: Location? = null
-            for (provider in providers) {
+            val now = System.currentTimeMillis()
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 try {
-                    if (lm.isProviderEnabled(provider)) {
-                        val loc = lm.getLastKnownLocation(provider)
-                        if (loc != null && !isLocationMocked(loc) && (loc.latitude != 0.0 || loc.longitude != 0.0)) {
-                            if (bestLoc == null || loc.time > bestLoc.time) {
-                                bestLoc = loc
-                            }
-                        }
+                    val gpsLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    val isFreshGps = gpsLoc != null && (now - gpsLoc.time) <= TimeUnit.MINUTES.toMillis(5)
+                    if (gpsLoc != null && isFreshGps && !isLocationMocked(gpsLoc) && (gpsLoc.latitude != 0.0 || gpsLoc.longitude != 0.0)) {
+                        latestLat = gpsLoc.latitude
+                        latestLng = gpsLoc.longitude
+                        return Pair(gpsLoc.latitude, gpsLoc.longitude)
                     }
                 } catch (_: Exception) {
                 }
-            }
-            if (bestLoc != null) {
-                latestLat = bestLoc.latitude
-                latestLng = bestLoc.longitude
-                return Pair(bestLoc.latitude, bestLoc.longitude)
             }
             val cachedLat = latestLat
             val cachedLng = latestLng
