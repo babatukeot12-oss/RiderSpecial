@@ -9,7 +9,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.location.Location
 import android.location.LocationListener
@@ -75,6 +79,7 @@ class MainActivity : Activity() {
 
     private var latestLat: Double? = null
     private var latestLng: Double? = null
+    private var lastLocationFixTime: Long = 0L
     private var lastMovementText: String = "Live"
 
     private val locationHandler = Handler(Looper.getMainLooper())
@@ -85,6 +90,133 @@ class MainActivity : Activity() {
     private var activeLocationPhotoB64: String = ""
     private var activeLocationHardwareId: String = ""
 
+    private enum class VehicleCategory(val key: String, val label: String) {
+        BIKE("bike", "Bike"),
+        AUTO("auto", "Auto"),
+        CAB("cab", "Cab"),
+        E_RICKSHAW("e_rickshaw", "E-Rickshaw"),
+        EV("ev", "EV"),
+        SCOOTY("scooty", "Scooty");
+
+        companion object {
+            fun fromKey(raw: String?): VehicleCategory? {
+                val k = raw?.trim()?.lowercase(Locale.US) ?: return null
+                return when (k) {
+                    "bike", "motorcycle", "moto" -> BIKE
+                    "auto", "autorickshaw", "auto_rickshaw", "three_wheeler", "3w" -> AUTO
+                    "cab", "car", "taxi" -> CAB
+                    "e_rickshaw", "erickshaw", "e-rickshaw", "toto" -> E_RICKSHAW
+                    "ev", "electric", "electric_vehicle" -> EV
+                    "scooty", "scooter" -> SCOOTY
+                    else -> null
+                }
+            }
+
+            fun safeLabel(raw: String?): String = fromKey(raw)?.label ?: "Bike"
+        }
+    }
+
+    private fun createVehicleIconDrawable(category: VehicleCategory): Drawable {
+        val accent = when (category) {
+            VehicleCategory.BIKE -> Color.parseColor("#38BDF8")
+            VehicleCategory.AUTO -> Color.parseColor("#FACC15")
+            VehicleCategory.CAB -> Color.parseColor("#A78BFA")
+            VehicleCategory.E_RICKSHAW -> Color.parseColor("#34D399")
+            VehicleCategory.EV -> Color.parseColor("#22D3EE")
+            VehicleCategory.SCOOTY -> Color.parseColor("#FB923C")
+        }
+        return object : Drawable() {
+            override fun draw(canvas: Canvas) {
+                val w = bounds.width().toFloat()
+                val h = bounds.height().toFloat()
+                if (w <= 0f || h <= 0f) return
+                val pad = minOf(w, h) * 0.08f
+                val bgRect = RectF(pad, pad, w - pad, h - pad)
+                val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#0F172A")
+                    style = Paint.Style.FILL
+                }
+                val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = accent
+                    style = Paint.Style.STROKE
+                    strokeWidth = maxOf(2f, minOf(w, h) * 0.05f)
+                }
+                val r = minOf(w, h) * 0.22f
+                canvas.drawRoundRect(bgRect, r, r, bgPaint)
+                canvas.drawRoundRect(bgRect, r, r, borderPaint)
+
+                val fg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = accent
+                    style = Paint.Style.STROKE
+                    strokeWidth = maxOf(2.2f, minOf(w, h) * 0.065f)
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                }
+                val fillFg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = accent
+                    style = Paint.Style.FILL
+                }
+
+                when (category) {
+                    VehicleCategory.BIKE, VehicleCategory.SCOOTY -> {
+                        val wheelY = h * 0.68f
+                        val wheelR = minOf(w, h) * 0.13f
+                        canvas.drawCircle(w * 0.28f, wheelY, wheelR, fg)
+                        canvas.drawCircle(w * 0.72f, wheelY, wheelR, fg)
+                        val body = Path().apply {
+                            moveTo(w * 0.28f, wheelY)
+                            lineTo(w * 0.46f, h * 0.48f)
+                            lineTo(w * 0.64f, h * 0.48f)
+                            lineTo(w * 0.72f, wheelY)
+                            moveTo(w * 0.60f, h * 0.48f)
+                            lineTo(w * 0.56f, h * 0.34f)
+                            lineTo(w * 0.66f, h * 0.34f)
+                        }
+                        canvas.drawPath(body, fg)
+                    }
+                    VehicleCategory.AUTO, VehicleCategory.E_RICKSHAW -> {
+                        val wheelY = h * 0.70f
+                        val wheelR = minOf(w, h) * 0.12f
+                        canvas.drawCircle(w * 0.30f, wheelY, wheelR, fg)
+                        canvas.drawCircle(w * 0.70f, wheelY, wheelR, fg)
+                        val cabin = Path().apply {
+                            moveTo(w * 0.22f, h * 0.62f)
+                            lineTo(w * 0.26f, h * 0.34f)
+                            lineTo(w * 0.56f, h * 0.34f)
+                            lineTo(w * 0.76f, h * 0.54f)
+                            lineTo(w * 0.76f, h * 0.62f)
+                            close()
+                        }
+                        canvas.drawPath(cabin, fg)
+                    }
+                    VehicleCategory.CAB, VehicleCategory.EV -> {
+                        val wheelY = h * 0.70f
+                        val wheelR = minOf(w, h) * 0.11f
+                        canvas.drawCircle(w * 0.28f, wheelY, wheelR, fg)
+                        canvas.drawCircle(w * 0.72f, wheelY, wheelR, fg)
+                        val carBody = RectF(w * 0.18f, h * 0.48f, w * 0.82f, h * 0.65f)
+                        canvas.drawRoundRect(carBody, 6f, 6f, fg)
+                        val roof = Path().apply {
+                            moveTo(w * 0.30f, h * 0.48f)
+                            lineTo(w * 0.38f, h * 0.33f)
+                            lineTo(w * 0.64f, h * 0.33f)
+                            lineTo(w * 0.72f, h * 0.48f)
+                        }
+                        canvas.drawPath(roof, fg)
+                        if (category == VehicleCategory.EV) {
+                            canvas.drawCircle(w * 0.50f, h * 0.56f, maxOf(2.5f, w * 0.04f), fillFg)
+                        }
+                    }
+                }
+            }
+
+            override fun setAlpha(alpha: Int) {}
+            override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {}
+            @Deprecated("Deprecated in Java")
+            override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
+        }
+    }
+
     private val gpsListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
             if (isLocationMocked(location)) return
@@ -93,6 +225,7 @@ class MainActivity : Activity() {
                 val prevLng = latestLng
                 latestLat = location.latitude
                 latestLng = location.longitude
+                lastLocationFixTime = System.currentTimeMillis()
                 lastMovementText = if (prevLat != null && prevLng != null) {
                     val moved = FloatArray(1)
                     Location.distanceBetween(prevLat, prevLng, location.latitude, location.longitude, moved)
@@ -180,6 +313,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun speakSwitchState(ctx: Context, soundEnabled: Boolean, featureName: String, isOn: Boolean) {
+        if (!soundEnabled) return
+        val stateWord = if (isOn) {
+            tr("is on", "चालू है", "চালু হৈছে")
+        } else {
+            tr("is off", "बंद है", "বন্ধ হৈছে")
+        }
+        speakText(ctx, true, "$featureName $stateWord")
+    }
+
     private fun countWords(text: String): Int {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return 0
@@ -199,6 +342,36 @@ class MainActivity : Activity() {
         val diffMillis = validUntil - nowMillis
         val dayMs = TimeUnit.DAYS.toMillis(1)
         return (diffMillis + dayMs - 1L) / dayMs
+    }
+
+    private fun shouldAcceptOrderDirectly(pickupOn: Boolean, dropOn: Boolean, fareOn: Boolean): Boolean {
+        return !pickupOn && !dropOn && !fareOn
+    }
+
+    private fun evaluateOrderAgainstRules(
+        pickupOn: Boolean,
+        maxPickupKm: Double,
+        dropOn: Boolean,
+        maxDropKm: Double,
+        fareOn: Boolean,
+        minFareRs: Double,
+        incomingPickupKm: Double,
+        incomingDropKm: Double,
+        incomingFareRs: Double
+    ): Boolean {
+        if (shouldAcceptOrderDirectly(pickupOn, dropOn, fareOn)) {
+            return true
+        }
+        if (pickupOn && incomingPickupKm > maxPickupKm) {
+            return false
+        }
+        if (dropOn && incomingDropKm > maxDropKm) {
+            return false
+        }
+        if (fareOn && incomingFareRs < minFareRs) {
+            return false
+        }
+        return true
     }
 
     @Suppress("DEPRECATION")
@@ -383,6 +556,7 @@ class MainActivity : Activity() {
                     if (gpsLoc != null && !isLocationMocked(gpsLoc) && (gpsLoc.latitude != 0.0 || gpsLoc.longitude != 0.0)) {
                         latestLat = gpsLoc.latitude
                         latestLng = gpsLoc.longitude
+                        lastLocationFixTime = System.currentTimeMillis()
                     }
                 } catch (_: Exception) {
                 }
@@ -407,7 +581,7 @@ class MainActivity : Activity() {
         if (!hasRiderLocationPermission(ctx) || !isDeviceLocationEnabled(ctx)) return
         val nowMillis = System.currentTimeMillis()
         val coords = readCurrentLocation(ctx)
-        val cleanVehicle = VehicleType.fromKey(vehicleKey)?.key ?: "bike"
+        val cleanVehicle = VehicleCategory.fromKey(vehicleKey)?.key ?: "bike"
         try {
             val rootRef = FirebaseDatabase.getInstance().reference.child("captain_smart_pro")
             val riderMap = mutableMapOf<String, Any>(
@@ -445,6 +619,7 @@ class MainActivity : Activity() {
                     if (gpsLoc != null && isFreshGps && !isLocationMocked(gpsLoc) && (gpsLoc.latitude != 0.0 || gpsLoc.longitude != 0.0)) {
                         latestLat = gpsLoc.latitude
                         latestLng = gpsLoc.longitude
+                        lastLocationFixTime = now
                         return Pair(gpsLoc.latitude, gpsLoc.longitude)
                     }
                 } catch (_: Exception) {
@@ -459,6 +634,17 @@ class MainActivity : Activity() {
             }
         } catch (_: Exception) {
             null
+        }
+    }
+
+    private fun formatLastSyncAge(nowMillis: Long): String {
+        if (lastLocationFixTime <= 0L) {
+            return tr("GPS: Waiting", "GPS: प्रतीक्षा में", "GPS: অপেক্ষাৰত")
+        }
+        val sec = ((nowMillis - lastLocationFixTime) / 1000L).coerceAtLeast(0L)
+        return when {
+            sec < 60L -> tr("GPS: ${sec}s ago", "GPS: ${sec} सेकंड पहले", "GPS: ${sec} ছেকেণ্ড পূৰ্বে")
+            else -> tr("GPS: ${sec / 60L}m ago", "GPS: ${sec / 60L} मिनट पहले", "GPS: ${sec / 60L} মিনিট পূৰ্বে")
         }
     }
 
@@ -608,6 +794,39 @@ class MainActivity : Activity() {
             }
         } catch (_: Exception) {
         }
+    }
+
+    private fun openLanguageSelectionDialog(ctx: Context, onSelected: () -> Unit) {
+        val options = arrayOf(
+            "English",
+            "हिन्दी (Hindi)",
+            "অসমীয়া (Assamese)"
+        )
+        val codes = arrayOf("EN", "HI", "AS")
+        val currentIdx = codes.indexOf(selectedLang).coerceAtLeast(0)
+
+        AlertDialog.Builder(ctx)
+            .setTitle(tr("🌐 Select Language", "🌐 भाषा चुनें", "🌐 ভাষা বাছনি কৰক"))
+            .setSingleChoiceItems(options, currentIdx) { dialog, which ->
+                val chosen = codes.getOrElse(which) { "EN" }
+                selectedLang = chosen
+                applyTtsLanguageAndSoftVoice()
+                ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("app_lang", selectedLang)
+                    .apply()
+                val msg = when (selectedLang) {
+                    "HI" -> "हिन्दी भाषा चुनी गई है"
+                    "AS" -> "অসমীয়া ভাষা বাছনি কৰা হৈছে"
+                    else -> "English language selected"
+                }
+                Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+                speakText(ctx, true, msg)
+                dialog.dismiss()
+                onSelected()
+            }
+            .setNegativeButton(tr("Cancel", "बंद करें", "বন্ধ কৰক"), null)
+            .show()
     }
 
     private fun pickPhotoFromGallery(ctx: Context, onBase64Ready: (String) -> Unit) {
@@ -802,7 +1021,7 @@ class MainActivity : Activity() {
                     "riderId" to riderId,
                     "fullName" to riderName,
                     "mobile" to riderMobile,
-                    "vehicleType" to (VehicleType.fromKey(riderVehicleKey)?.key ?: "bike"),
+                    "vehicleType" to (VehicleCategory.fromKey(riderVehicleKey)?.key ?: "bike"),
                     "hardwareId" to hardwareId,
                     "photoB64" to riderPhotoB64,
                     "trialStart" to trialStart,
@@ -1006,7 +1225,7 @@ class MainActivity : Activity() {
     ) {
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         var photoB64 = existingPhotoB64
-        var selectedVehicle: VehicleType? = VehicleType.fromKey(existingVehicleKey)
+        var selectedVehicle: VehicleCategory? = VehicleCategory.fromKey(existingVehicleKey)
 
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
@@ -1067,7 +1286,7 @@ class MainActivity : Activity() {
             setPadding(0, 0, 0, 8)
         }
 
-        val vehicleViews = mutableMapOf<VehicleType, LinearLayout>()
+        val vehicleViews = mutableMapOf<VehicleCategory, LinearLayout>()
 
         fun refreshVehicleHighlight() {
             vehicleViews.forEach { (vType, box) ->
@@ -1082,11 +1301,10 @@ class MainActivity : Activity() {
             vehicleStatusTv.text = "Selected Vehicle: ${selectedVehicle?.label ?: "None"}"
         }
 
-        val allVehicles = VehicleType.entries
+        val allVehicles = VehicleCategory.entries
         val rows = listOf(
             allVehicles.take(3),
-            allVehicles.drop(3).take(3),
-            allVehicles.drop(6)
+            allVehicles.drop(3)
         )
 
         rows.forEach { rowItems ->
@@ -1106,8 +1324,8 @@ class MainActivity : Activity() {
                         if (idx > 0) leftMargin = 6
                     }
                     addView(ImageView(ctx).apply {
-                        setImageResource(vType.iconRes)
-                        layoutParams = LinearLayout.LayoutParams(44, 44)
+                        setImageDrawable(createVehicleIconDrawable(vType))
+                        layoutParams = LinearLayout.LayoutParams(54, 54)
                     })
                     addView(TextView(ctx).apply {
                         text = vType.label
@@ -1470,7 +1688,7 @@ class MainActivity : Activity() {
         val mBlock = "🛡️ Block / Unblock Rider"
         val mQrLinks = "📱 QR Code & Social Links"
         val mFresh = "🔄 Reset Login (Fresh Account)"
-        val mLang = "🌐 Language: English / हिन्दी / অসমীয়া"
+        val mLang = "🌐 Language"
         val mBack = "🏍️ Rider Panel"
 
         adminDotsBtn.setOnClickListener {
@@ -1493,8 +1711,7 @@ class MainActivity : Activity() {
                     mBlock -> openBlockRiderDialog(ctx, defaultRiderId)
                     mQrLinks -> openAdminQrAndLinksDialog(ctx)
                     mFresh -> confirmFreshAccountReset(ctx, hwId)
-                    mLang -> {
-                        cycleAppLanguage(ctx)
+                    mLang -> openLanguageSelectionDialog(ctx) {
                         showAdminDashboardScreen(ctx, defaultRiderId)
                     }
                     mBack -> loadAndStart(ctx, hwId)
@@ -1524,7 +1741,7 @@ class MainActivity : Activity() {
     )
 
     private fun openSingleRiderActionsDialog(ctx: Context, entry: RiderEntry, refreshList: () -> Unit) {
-        val vLabel = VehicleType.safeLabel(entry.vehicleTypeKey)
+        val vLabel = VehicleCategory.safeLabel(entry.vehicleTypeKey)
         val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
         val locText = if (hasCoords) {
             "Live (${entry.movementStatus}): ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
@@ -1534,7 +1751,7 @@ class MainActivity : Activity() {
 
         val options = arrayOf(
             "📞 Call Rider (${entry.mobile})",
-            "💬 Chat & Photos",
+            "💬 Chat & Message Rider",
             "📍 Open Live Location on Map",
             "💳 Subscription Days (+/-) [Left: ${entry.remainingDays}d]",
             "🛡️ Block / Unblock Rider",
@@ -1780,8 +1997,8 @@ class MainActivity : Activity() {
             val q = filterQuery.trim().lowercase(Locale.US)
             var count = 0
             for (entry in allEntries) {
-                val vType = VehicleType.fromKey(entry.vehicleTypeKey) ?: VehicleType.BIKE
-                val vLabel = vType.label
+                val vCat = VehicleCategory.fromKey(entry.vehicleTypeKey) ?: VehicleCategory.BIKE
+                val vLabel = vCat.label
                 if (q.isNotEmpty() &&
                     !entry.name.lowercase(Locale.US).contains(q) &&
                     !entry.mobile.lowercase(Locale.US).contains(q) &&
@@ -1804,8 +2021,8 @@ class MainActivity : Activity() {
                     if (bmp != null) setImageBitmap(bmp)
                 }
                 val vehicleIconView = ImageView(ctx).apply {
-                    setImageResource(vType.iconRes)
-                    layoutParams = LinearLayout.LayoutParams(54, 54).apply { rightMargin = 8 }
+                    setImageDrawable(createVehicleIconDrawable(vCat))
+                    layoutParams = LinearLayout.LayoutParams(62, 62).apply { rightMargin = 10 }
                 }
                 val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
                 val locInfo = if (hasCoords) {
@@ -2246,9 +2463,11 @@ class MainActivity : Activity() {
         ctx: Context,
         riderId: String,
         pickupEt: EditText,
+        swPickupLimit: Switch,
         dropEt: EditText,
-        amountEt: EditText,
         swDropLimit: Switch,
+        amountEt: EditText,
+        swFareLimit: Switch,
         swOnlyOlaRapido: Switch,
         swSoundTts: Switch,
         swAutoAccept: Switch,
@@ -2261,20 +2480,28 @@ class MainActivity : Activity() {
             setPadding(32, 24, 32, 20)
         }
         val pEt = EditText(ctx).apply {
-            hint = tr("Max Pickup Distance (Km)", "अधिकतम पिकअप दूरी (किमी)", "সৰ্বাধিক পিকআপ দূৰত্ব (কিঃমিঃ)")
+            hint = tr("Pickup Distance (Km)", "पिकअप दूरी (किमी)", "পিকআপ দূৰত্ব (কিঃমিঃ)")
             setText(pickupEt.text.toString())
+        }
+        val pSw = Switch(ctx).apply {
+            text = tr("Pickup Limit (On/Off)", "पिकअप सीमा (On/Off)", "পিকআপ সীমা (On/Off)")
+            isChecked = swPickupLimit.isChecked
         }
         val dEt = EditText(ctx).apply {
             hint = tr("Drop Distance (Km)", "ड्रॉप दूरी (किमी)", "ড্ৰপ দূৰত্ব (কিঃমিঃ)")
             setText(dropEt.text.toString())
         }
         val dSw = Switch(ctx).apply {
-            text = tr("Enable Drop Limit (On/Off)", "ड्रॉप सीमा लागू करें (On/Off)", "ড্ৰপ সীমা প্ৰয়োগ কৰক (On/Off)")
+            text = tr("Drop Limit (On/Off)", "ड्रॉप सीमा (On/Off)", "ড্ৰপ সীমা (On/Off)")
             isChecked = swDropLimit.isChecked
         }
         val aEt = EditText(ctx).apply {
-            hint = tr("Min Ride Amount / Fare (₹)", "न्यूनतम किराया (₹)", "নূন্যতম ভাড়া (₹)")
+            hint = tr("Max Fare / Ride Amount (₹)", "अधिकतम किराया / अमाउंट (₹)", "সৰ্বাধিক ভাড়া / অমাউণ্ট (₹)")
             setText(amountEt.text.toString())
+        }
+        val fSw = Switch(ctx).apply {
+            text = tr("Fare / Amount Limit (On/Off)", "किराया / अमाउंट सीमा (On/Off)", "ভাড়া / অমাউণ্ট সীমা (On/Off)")
+            isChecked = swFareLimit.isChecked
         }
         val s1 = Switch(ctx).apply {
             text = tr("Only Ola/Rapido", "केवल Ola/Rapido", "কেৱল Ola/Rapido")
@@ -2293,13 +2520,15 @@ class MainActivity : Activity() {
             isChecked = swScreenshot.isChecked
         }
 
-        box.addView(TextView(ctx).apply { text = tr("Max Pickup (Km):", "अधिकतम पिकअप (किमी):", "সৰ্বাধিক পিকআপ (কিঃমিঃ):") })
+        box.addView(TextView(ctx).apply { text = tr("Pickup (Km):", "पिकअप (किमी):", "পিকআপ (কিঃমিঃ):") })
         box.addView(pEt)
+        box.addView(pSw)
         box.addView(TextView(ctx).apply { text = tr("Drop (Km):", "ड्रॉप (किमी):", "ড্ৰপ (কিঃমিঃ):") })
         box.addView(dEt)
         box.addView(dSw)
-        box.addView(TextView(ctx).apply { text = tr("Min Ride Amount (₹):", "न्यूनतम अमाउंट (₹):", "নূন্যতম ভাড়া (₹):") })
+        box.addView(TextView(ctx).apply { text = tr("Fare / Amount (₹):", "किराया / अमाउंट (₹):", "ভাড়া / অমাউণ্ট (₹):") })
         box.addView(aEt)
+        box.addView(fSw)
         box.addView(s1)
         box.addView(s2)
         box.addView(s3)
@@ -2315,9 +2544,11 @@ class MainActivity : Activity() {
             .setView(scroll)
             .setPositiveButton(tr("Save", "सेव करें", "ছেভ কৰক")) { _, _ ->
                 pickupEt.setText(pEt.text.toString().trim())
+                swPickupLimit.isChecked = pSw.isChecked
                 dropEt.setText(dEt.text.toString().trim())
                 swDropLimit.isChecked = dSw.isChecked
                 amountEt.setText(aEt.text.toString().trim())
+                swFareLimit.isChecked = fSw.isChecked
                 swOnlyOlaRapido.isChecked = s1.isChecked
                 swSoundTts.isChecked = s2.isChecked
                 swAutoAccept.isChecked = s3.isChecked
@@ -2478,10 +2709,12 @@ class MainActivity : Activity() {
     private fun showRiderDashboard(ctx: Context, riderId: String, riderName: String) {
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val pickupDef = prefs.getString("pickup_km", "1.0") ?: "1.0"
+        val pickupLimitDef = prefs.getBoolean("pickup_limit_on", true)
         val dropDef = prefs.getString("drop_km", "4.0") ?: "4.0"
         val dropLimitDef = prefs.getBoolean("drop_limit_on", false)
         val fareDef = prefs.getString("fare_rs", "20") ?: "20"
-        val vehicleLabel = VehicleType.safeLabel(prefs.getString("rider_vehicle_type", "bike"))
+        val fareLimitDef = prefs.getBoolean("fare_limit_on", true)
+        val vehicleCat = VehicleCategory.fromKey(prefs.getString("rider_vehicle_type", "bike")) ?: VehicleCategory.BIKE
 
         var isEngineActivated = false
         var isAutoAcceptEnabled = false
@@ -2509,10 +2742,15 @@ class MainActivity : Activity() {
             setOnClickListener { promptAdminPassport(ctx, riderId) }
         }
 
+        val riderVehicleBadge = ImageView(ctx).apply {
+            setImageDrawable(createVehicleIconDrawable(vehicleCat))
+            layoutParams = LinearLayout.LayoutParams(48, 48).apply { leftMargin = 8 }
+        }
+
         val brandCol = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = 10
+                leftMargin = 8
             }
         }
         brandCol.addView(TextView(ctx).apply {
@@ -2522,7 +2760,7 @@ class MainActivity : Activity() {
             setTextColor(accentGreenBright)
         })
         brandCol.addView(TextView(ctx).apply {
-            text = "$riderName • $riderId • $vehicleLabel"
+            text = "$riderName • $riderId • ${vehicleCat.label}"
             textSize = 11f
             setTextColor(textMuted)
         })
@@ -2541,6 +2779,7 @@ class MainActivity : Activity() {
         }
 
         topBar.addView(leftAdminBtn)
+        topBar.addView(riderVehicleBadge)
         topBar.addView(brandCol)
         topBar.addView(riderDotsBtn)
         root.addView(topBar)
@@ -2578,7 +2817,7 @@ class MainActivity : Activity() {
             setTextColor(textWhite)
         })
         fleetLeft.addView(TextView(ctx).apply {
-            text = "Dibrugarh Fleet Dispatcher ($vehicleLabel)"
+            text = "Dibrugarh Fleet Dispatcher (${vehicleCat.label})"
             textSize = 12f
             setTextColor(Color.parseColor("#60A5FA"))
             setPadding(0, 4, 0, 4)
@@ -2592,523 +2831,57 @@ class MainActivity : Activity() {
             textSize = 12f
             setTextColor(Color.parseColor("#F87171"))
         }
+        val gpsSyncTv = TextView(ctx).apply {
+            text = formatLastSyncAge(System.currentTimeMillis())
+            textSize = 11f
+            setTextColor(accentGreenBright)
+            setPadding(0, 4, 0, 0)
+        }
         fleetLeft.addView(fleetStateTv)
+        fleetLeft.addView(gpsSyncTv)
 
-        val swDropLimit = makeSwitchRow(ctx, tr("🏁 Drop Limit (On/Off)", "🏁 ड्रॉप सीमा लागू करें (On/Off)", "🏁 ড্ৰপ সীমা প্ৰয়োগ কৰক (On/Off)"), dropLimitDef)
-        val swOnlyOlaRapido = makeSwitchRow(ctx, tr("⚡ Only Ola/Rapido", "⚡ केवल Ola/Rapido", "⚡ কেৱল Ola/Rapido"), true)
-        val swSoundTts = makeSwitchRow(ctx, tr("🔊 Play Sound / TTS", "🔊 आवाज़ / TTS चलाएं", "🔊 আৱাজ / TTS চলাওক"), true)
-        val swAutoAccept = makeSwitchRow(ctx, tr("🤖 Auto Accept", "🤖 ऑटो एक्सेप्ट", "🤖 অটো এক্সেপ্ট"), true)
-        val swScreenshot = makeSwitchRow(ctx, tr("📸 Screenshot Save to Gallery", "📸 स्क्रीनशॉट गैलरी में सेव करें", "📸 স্ক্ৰীণশ্বট গেলাৰীত ছেভ কৰক"), true)
+        val gpsUiHandler = Handler(Looper.getMainLooper())
+        val gpsUiRunnable = object : Runnable {
+            override fun run() {
+                gpsSyncTv.text = formatLastSyncAge(System.currentTimeMillis())
+                gpsUiHandler.postDelayed(this, 4_000L)
+            }
+        }
+        gpsUiHandler.post(gpsUiRunnable)
 
-        val pickupEt = makeStyledInput(ctx, pickupDef, "Pickup Km (<= set)")
+        val pickupEt = makeStyledInput(ctx, pickupDef, "Pickup Km")
         val dropEt = makeStyledInput(ctx, dropDef, "Drop Km")
-        val amountEt = makeStyledInput(ctx, fareDef, "Min Amount ₹ (>= set)")
+        val amountEt = makeStyledInput(ctx, fareDef, "Fare / Amount ₹")
 
-        val savePrefsAction: () -> Unit = {
-            prefs.edit()
-                .putString("pickup_km", pickupEt.text.toString().trim())
-                .putString("drop_km", dropEt.text.toString().trim())
-                .putBoolean("drop_limit_on", swDropLimit.isChecked)
-                .putString("fare_rs", amountEt.text.toString().trim())
-                .putBoolean("parcel_mode_on", isParcelModeOn)
-                .apply()
-            speakText(
-                ctx,
-                swSoundTts.isChecked,
-                tr("Rider preferences saved", "सेटिंग्स सेव हो गई हैं", "ৰাইডাৰ ছেটিংছ ছেভ কৰা হৈছে")
-            )
-            Toast.makeText(ctx, tr("Preferences Saved", "सेटिंग्स सेव हुईं", "ছেটিংছ ছেভ হ'ল"), Toast.LENGTH_SHORT).show()
-        }
-
-        val activateEngineNow: () -> Unit = {
-            isEngineActivated = true
-            val vKey = prefs.getString("rider_vehicle_type", "bike")
-            val pB64 = prefs.getString("rider_photo_b64", "") ?: ""
-            val hw = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
-            startLocationLoop(riderId, riderName, vKey, pB64, hw)
-            pushRiderLiveLocation(ctx, riderId, riderName, vKey, pB64, hw)
-            fleetStateTv.text = tr("✅ Engine Activated • Location Live", "✅ इंजन एक्टिव • लोकेशन लाइव", "✅ ইঞ্জিন এক্টিভ • লোকেচন লাইভ")
-            fleetStateTv.setTextColor(accentGold)
-            speakText(ctx, swSoundTts.isChecked, tr("Engine activated, live location is on", "इंजन चालू हो गया है, लाइव लोकेशन ऑन है", "ইঞ্জিন চালু হৈছে, লাইভ লোকেচন অন আছে"))
-            Toast.makeText(ctx, tr("Engine Activated", "इंजन चालू", "ইঞ্জিন চালু হ'ল"), Toast.LENGTH_SHORT).show()
-        }
-
-        val autoAcceptBtn = makeStyledButton(
-            ctx,
-            tr("⚡ AUTO ACCEPT\nOFF", "⚡ ऑटो एक्सेप्ट\nबंद", "⚡ অটো এক্সেপ্ট\nবন্ধ"),
-            Color.parseColor("#2A3954")
-        ).apply {
-            setOnClickListener {
-                if (!isEngineActivated) {
-                    Toast.makeText(
-                        ctx,
-                        tr("Open ⋮ on top to Activate Engine first", "पहले ऊपर ⋮ से इंजन एक्टिव करें", "প্ৰথমে ওপৰৰ ⋮ ৰ পৰা ইঞ্জিন এক্টিভ কৰক"),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@setOnClickListener
-                }
-                isAutoAcceptEnabled = !isAutoAcceptEnabled
-                if (isAutoAcceptEnabled) {
-                    text = tr("⚡ AUTO ACCEPT\nON", "⚡ ऑटो एक्सेप्ट\nचालू", "⚡ অটো এক্সেপ্ট\nচালু")
-                    background = make3dPill(accentGreen, accentGreenBright, 14f)
-                    fleetStateTv.text = tr("✅ Active • Auto Accept ON", "✅ सक्रिय • ऑटो एक्सेप्ट चालू", "✅ সক্ৰিয় • অটো এক্সেপ্ট চালু")
-                    fleetStateTv.setTextColor(accentGreenBright)
-                    speakText(ctx, swSoundTts.isChecked, tr("Order auto accept is on", "ऑर्डर ऑटो एक्सेप्ट चालू है", "অৰ্ডাৰ অটো এক্সেপ্ট চালু হৈছে"))
-                } else {
-                    text = tr("⚡ AUTO ACCEPT\nOFF", "⚡ ऑटो एक्सेप्ट\nबंद", "⚡ অটো এক্সেপ্ট\nবন্ধ")
-                    background = make3dPill(Color.parseColor("#2A3954"), borderSlate, 14f)
-                    fleetStateTv.text = tr("⏸️ Activated • Auto Accept OFF", "⏸️ एक्टिव • ऑटो एक्सेप्ट बंद", "⏸️ এক্টিভ • অটো এক্সেপ্ট বন্ধ")
-                    fleetStateTv.setTextColor(accentGold)
-                    speakText(ctx, swSoundTts.isChecked, tr("Auto accept is off", "ऑटो एक्सेप्ट बंद है", "অটো এক্সেপ্ট বন্ধ কৰা হৈছে"))
-                }
-            }
-        }
-
-        riderDotsBtn.setOnClickListener {
-            val popup = PopupMenu(ctx, riderDotsBtn)
-            val actLabel = if (isEngineActivated) {
-                tr("⏹️ Deactivate Engine", "⏹️ इंजन बंद करें", "⏹️ ইঞ্জিন বন্ধ কৰক")
-            } else {
-                tr("▶️ Activate Engine", "▶️ इंजन चालू करें", "▶️ ইঞ্জিন চালু কৰক")
-            }
-            val accLabel = tr("♿ Accessibility Settings", "♿ एक्सेसिबिलिटी सेटिंग", "♿ এক্সেচিবিলিটি ছেটিংছ")
-            val setLabel = tr("⚙️ Settings", "⚙️ सेटिंग्स", "⚙️ ছেটিংছ")
-            val langLabel = tr("🌐 Language: English / हिन्दी / অসমীয়া", "🌐 भाषा: English / हिन्दी / অসমীয়া", "🌐 ভাষা: English / हिन्दी / অসমীয়া")
-            val chatLabel = tr("💬 Live Chat", "💬 लाइव चैट", "💬 লাইভ চেট")
-            val linksLabel = tr("📱 Social Links", "📱 सोशल लिंक्स", "📱 ছ'চিয়েল লিংকসমূহ")
-
-            popup.menu.add(actLabel)
-            popup.menu.add(accLabel)
-            popup.menu.add(setLabel)
-            popup.menu.add(langLabel)
-            popup.menu.add(chatLabel)
-            popup.menu.add(linksLabel)
-
-            popup.setOnMenuItemClickListener { item ->
-                when (item.title.toString()) {
-                    actLabel -> {
-                        if (!isEngineActivated) {
-                            requireLocationAndGpsForEngine(ctx) {
-                                activateEngineNow()
-                            }
-                        } else {
-                            isEngineActivated = false
-                            isAutoAcceptEnabled = false
-                            stopLocationLoop()
-                            autoAcceptBtn.text = tr("⚡ AUTO ACCEPT\nOFF", "⚡ ऑटो एक्सेप्ट\nबंद", "⚡ অটো এক্সেপ্ট\nবন্ধ")
-                            autoAcceptBtn.background = make3dPill(Color.parseColor("#2A3954"), borderSlate, 14f)
-                            fleetStateTv.text = tr("⏸️ Standby (Deactivated)", "⏸️ स्टैंडबाय", "⏸️ ষ্টেণ্ডবাই")
-                            fleetStateTv.setTextColor(Color.parseColor("#F87171"))
-                            speakText(ctx, swSoundTts.isChecked, tr("Engine deactivated", "इंजन बंद हो गया है", "ইঞ্জিন বন্ধ হৈছে"))
-                            Toast.makeText(ctx, tr("Engine Deactivated", "इंजन बंद", "ইঞ্জিন বন্ধ হ'ল"), Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    accLabel -> openAccessibilityScreen(ctx)
-                    setLabel -> openRiderSettingsDialog(
-                        ctx, riderId, pickupEt, dropEt, amountEt,
-                        swDropLimit, swOnlyOlaRapido, swSoundTts, swAutoAccept, swScreenshot, savePrefsAction
-                    )
-                    langLabel -> {
-                        cycleAppLanguage(ctx)
-                        showRiderDashboard(ctx, riderId, riderName)
-                    }
-                    chatLabel -> openRiderLiveChatDialog(ctx, riderId, riderName)
-                    linksLabel -> openRiderLinksDialog(ctx)
-                }
-                true
-            }
-            popup.show()
-        }
-
-        fleetRow.addView(fleetLeft)
-        fleetRow.addView(autoAcceptBtn)
-        fleetCard.addView(fleetRow)
-        homeLayout.addView(fleetCard)
-
-        val shareLocationBtn = makeStyledButton(
-            ctx,
-            tr("📍 SHARE LIVE LOCATION", "📍 लाइव लोकेशन शेयर करें", "📍 লাইভ লোকেচন শ্বেয়াৰ কৰক"),
-            accentTeal
-        ).apply {
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = 6
-            }
-            setOnClickListener {
-                shareRiderLiveLocationWithFamily(ctx, riderName, riderId)
-            }
-        }
-
-        val parcelToggleBtn = makeStyledButton(
-            ctx,
-            if (isParcelModeOn) {
-                tr("📦 PARCEL: ON (Parcel Only)", "📦 पार्सल: ON (केवल पार्सल)", "📦 পাৰ্চেল: ON (কেৱল পাৰ্চেল)")
-            } else {
-                tr("📦 PARCEL: OFF", "📦 पार्सल: OFF", "📦 পাৰ্চেল: OFF")
-            },
-            if (isParcelModeOn) accentGreen else accentPurple
-        ).apply {
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                leftMargin = 6
-            }
-            setOnClickListener {
-                isParcelModeOn = !isParcelModeOn
-                prefs.edit().putBoolean("parcel_mode_on", isParcelModeOn).apply()
-                if (isParcelModeOn) {
-                    text = tr("📦 PARCEL: ON (Parcel Only)", "📦 पार्सल: ON (केवल पार्सल)", "📦 পাৰ্চেল: ON (কেৱল পাৰ্চেল)")
-                    background = make3dPill(accentGreen, accentGreenBright, 16f)
-                    speakText(ctx, swSoundTts.isChecked, tr("Parcel mode is on", "पार्सल मोड चालू है", "পাৰ্চেল মোড চালু হৈছে"))
-                    Toast.makeText(ctx, tr("Parcel ON • Only Parcel Accepted", "पार्सल ON • केवल पार्सल एक्सेप्ट होगा", "পাৰ্চেল ON • কেৱল পাৰ্চেল গ্ৰহণ হ'ব"), Toast.LENGTH_SHORT).show()
-                } else {
-                    text = tr("📦 PARCEL: OFF", "📦 पार्सल: OFF", "📦 পাৰ্চেল: OFF")
-                    background = make3dPill(accentPurple, Color.parseColor("#93C5FD"), 16f)
-                    speakText(ctx, swSoundTts.isChecked, tr("Parcel mode is off", "पार्सल मोड बंद है", "পাৰ্চেল মোড বন্ধ কৰা হৈছে"))
-                    Toast.makeText(ctx, tr("Parcel OFF", "पार्सल OFF", "পাৰ্চেল OFF"), Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-
-        val row1 = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = 12 }
-        }
-        row1.addView(shareLocationBtn)
-        row1.addView(parcelToggleBtn)
-        homeLayout.addView(row1)
-
-        val rulesCard = makeCard(ctx, cardDark, borderSlate)
-        rulesCard.addView(TextView(ctx).apply {
-            text = tr(
-                "🎯 Rider Ride Rules (Pickup <= Set • Min ₹)",
-                "🎯 राइडर नियम (पिकअप <= सेट • न्यूनतम ₹)",
-                "🎯 ৰাইডাৰ নিয়ম (পিকআপ <= ছেট • নূন্যতম ₹)"
-            )
-            textSize = 14f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(textWhite)
+        val rulesSummaryTv = TextView(ctx).apply {
+            textSize = 12f
+            setTextColor(accentGold)
             setPadding(0, 0, 0, 10)
-        })
-
-        rulesCard.addView(TextView(ctx).apply {
-            text = tr("📍 Pickup Distance (Km) — Within set limit only", "📍 पिकअप दूरी (किमी) — सेट सीमा के अंदर", "📍 পিকআপ দূৰত্ব (কিঃমিঃ) — নিৰ্ধাৰিত সীমাৰ ভিতৰত")
-            textSize = 12f
-            setTextColor(textMuted)
-        })
-        rulesCard.addView(pickupEt)
-        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
-
-        rulesCard.addView(TextView(ctx).apply {
-            text = tr("🏁 Drop Distance (Km) — Capped when On, open when Off", "🏁 ड्रॉप दूरी (किमी) — On होने पर अंदर, Off होने पर खुली", "🏁 ড্ৰপ দূৰত্ব (কিঃমিঃ) — On হ'লে সীমিত, Off হ'লে খোলা")
-            textSize = 12f
-            setTextColor(textMuted)
-        })
-        rulesCard.addView(dropEt)
-        rulesCard.addView(swDropLimit)
-        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
-
-        rulesCard.addView(TextView(ctx).apply {
-            text = tr("💰 Ride Amount / Fare (₹) — Equal or higher only", "💰 राइड अमाउंट / किराया (₹) — सेट से ज़्यादा या बराबर", "💰 ৰাইড ভাড়া (₹) — নিৰ্ধাৰিত ৰকম বা তাতকৈ বেছি")
-            textSize = 12f
-            setTextColor(textMuted)
-        })
-        rulesCard.addView(amountEt)
-
-        rulesCard.addView(swOnlyOlaRapido)
-        rulesCard.addView(swSoundTts)
-        rulesCard.addView(swAutoAccept)
-        rulesCard.addView(swScreenshot)
-
-        rulesCard.addView(makeStyledButton(
-            ctx,
-            tr("💾 SAVE RIDER PREFERENCES", "💾 राइडर सेटिंग्स सेव करें", "💾 ৰাইডাৰ ছেটিংছ ছেভ কৰক"),
-            accentGreen
-        ).apply {
-            setOnClickListener { savePrefsAction() }
-        })
-        homeLayout.addView(rulesCard)
-
-        homeLayout.addView(buildCompactSocialLinksCard(ctx))
-
-        homeScroll.addView(homeLayout)
-        frame.addView(homeScroll)
-        root.addView(frame)
-
-        setContentView(root)
-    }
-
-    private fun cycleAppLanguage(ctx: Context) {
-        selectedLang = when (selectedLang) {
-            "EN" -> "HI"
-            "HI" -> "AS"
-            else -> "EN"
         }
-        applyTtsLanguageAndSoftVoice()
-        ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
-            .edit()
-            .putString("app_lang", selectedLang)
-            .apply()
-        val label = when (selectedLang) {
-            "HI" -> "भाषा: हिन्दी (Hindi)"
-            "AS" -> "ভাষা: অসমীয়া (Assamese)"
-            else -> "Language: English"
-        }
-        Toast.makeText(ctx, label, Toast.LENGTH_SHORT).show()
-        speakText(
-            ctx,
-            true,
-            when (selectedLang) {
-                "HI" -> "हिन्दी भाषा चुनी गई है"
-                "AS" -> "অসমীয়া ভাষা বাছনি কৰা হৈছে"
-                else -> "English language selected"
-            }
-        )
-    }
 
-    private fun buildCompactSocialLinksCard(ctx: Context): LinearLayout {
-        val linksCard = makeCard(ctx, cardDark, borderSlate)
-        linksCard.addView(TextView(ctx).apply {
-            text = tr("📱 Social Links", "📱 सोशल लिंक्स", "📱 ছ'চিয়েল লিংকসমূহ")
-            textSize = 13f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(textWhite)
-            setPadding(0, 0, 0, 8)
-        })
-
-        val rowA = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = 8 }
-        }
-        rowA.addView(makeSmallSocialBtn(ctx, "facebook", fbUrl, 6))
-        rowA.addView(makeSmallSocialBtn(ctx, "whatsapp", waUrl, 0))
-        linksCard.addView(rowA)
-
-        val rowB = LinearLayout(ctx).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-        }
-        rowB.addView(makeSmallSocialBtn(ctx, "twitter", twUrl, 6))
-        rowB.addView(makeSmallSocialBtn(ctx, "youtube", ytUrl, 0))
-        linksCard.addView(rowB)
-
-        return linksCard
-    }
-
-    private fun makeSmallSocialBtn(ctx: Context, name: String, url: String, rightMarginPx: Int): Button {
-        val hasLink = url.isNotBlank()
-        return Button(ctx).apply {
-            text = if (hasLink) "$name • link" else "$name • not set"
-            textSize = 10f
-            isAllCaps = false
-            setTextColor(if (hasLink) textWhite else textMuted)
-            background = make3dPill(cardElevated, borderSlate, 10f)
-            setPadding(8, 10, 8, 10)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = rightMarginPx
-            }
-            setOnClickListener {
-                if (hasLink) {
-                    try {
-                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    } catch (_: Exception) {
-                        Toast.makeText(ctx, "Invalid $name link", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    Toast.makeText(ctx, "$name link not set", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
-    private fun makeClickableMetricBox(
-        ctx: Context,
-        title: String,
-        valueTv: TextView,
-        subLabel: String,
-        bgColor: Int,
-        strokeColor: Int,
-        rightMarginPx: Int,
-        onClick: () -> Unit
-    ): LinearLayout {
-        return LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            background = make3dPill(bgColor, strokeColor, 16f)
-            setPadding(8, 14, 8, 14)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = rightMarginPx
-            }
-            addView(TextView(ctx).apply {
-                text = title
-                textSize = 11f
-                setTextColor(textWhite)
-                gravity = Gravity.CENTER
-            })
-            addView(valueTv.apply { setPadding(0, 4, 0, 2) })
-            addView(TextView(ctx).apply {
-                text = subLabel
-                textSize = 10f
-                setTextColor(accentGold)
-                gravity = Gravity.CENTER
-            })
-            setOnClickListener { onClick() }
-        }
-    }
-
-    private fun makeMetricCard(
-        ctx: Context,
-        title: String,
-        value: String,
-        delta: String,
-        bgColor: Int,
-        strokeColor: Int,
-        rightMarginPx: Int
-    ): LinearLayout {
-        return LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            background = make3dPill(bgColor, strokeColor, 16f)
-            setPadding(10, 14, 10, 14)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = rightMarginPx
-            }
-            addView(TextView(ctx).apply {
-                text = title
-                textSize = 11f
-                setTextColor(textWhite)
-                gravity = Gravity.CENTER
-            })
-            addView(TextView(ctx).apply {
-                text = value
-                textSize = 16f
-                setTypeface(null, Typeface.BOLD)
-                setTextColor(textWhite)
-                gravity = Gravity.CENTER
-                setPadding(0, 4, 0, 2)
-            })
-            addView(TextView(ctx).apply {
-                text = delta
-                textSize = 10f
-                setTextColor(accentGold)
-                gravity = Gravity.CENTER
-            })
-        }
-    }
-
-    private fun speakText(ctx: Context, enabled: Boolean, message: String) {
-        if (!enabled) return
-        if (ttsReady && tts != null) {
-            tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "csp_tts")
-        } else {
-            Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    override fun onDestroy() {
-        stopLocationLoop()
-        tts?.stop()
-        tts?.shutdown()
-        super.onDestroy()
-    }
-
-    private fun makeStyledInput(ctx: Context, defVal: String, hintVal: String): EditText {
-        return EditText(ctx).apply {
-            setText(defVal)
-            hint = hintVal
-            setTextColor(textWhite)
-            setHintTextColor(textMuted)
-            textSize = 14f
-            background = make3dPill(cardElevated, borderSlate, 14f)
-            setPadding(16, 12, 16, 12)
-        }
-    }
-
-    private fun makeStyledButton(ctx: Context, label: String, bgColor: Int): Button {
-        return Button(ctx).apply {
-            text = label
-            textSize = 13f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            background = make3dPill(bgColor, Color.parseColor("#93C5FD"), 16f)
-            setPadding(16, 14, 16, 14)
-        }
-    }
-
-    private fun makeSwitchRow(ctx: Context, label: String, checked: Boolean): Switch {
-        return Switch(ctx).apply {
-            text = label
-            isChecked = checked
+        val swPickupLimit = Switch(ctx).apply {
+            text = tr("📍 Pickup Limit (On/Off)", "📍 पिकअप सीमा (On/Off)", "📍 পিকআপ সীমা (On/Off)")
+            isChecked = pickupLimitDef
             setTextColor(textWhite)
             textSize = 14f
-            setPadding(0, 10, 0, 10)
+            setPadding(0, 8, 0, 8)
         }
-    }
-
-    private fun makeCard(ctx: Context, fillColor: Int, strokeColor: Int): LinearLayout {
-        return LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            background = make3dPill(fillColor, strokeColor, 18f)
-            setPadding(18, 18, 18, 18)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = 14 }
+        val swDropLimit = Switch(ctx).apply {
+            text = tr("🏁 Drop Limit (On/Off)", "🏁 ड्रॉप सीमा (On/Off)", "🏁 ড্ৰপ সীমা (On/Off)")
+            isChecked = dropLimitDef
+            setTextColor(textWhite)
+            textSize = 14f
+            setPadding(0, 8, 0, 8)
         }
-    }
-
-    private fun make3dPill(fillColor: Int, strokeColor: Int, radius: Float): GradientDrawable {
-        return GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(
-                lightenColor(fillColor, 0.14f),
-                fillColor,
-                darkenColor(fillColor, 0.18f)
-            )
-        ).apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = radius
-            setStroke(3, strokeColor)
+        val swFareLimit = Switch(ctx).apply {
+            text = tr("💰 Fare / Amount Limit (On/Off)", "💰 किराया / अमाउंट सीमा (On/Off)", "💰 ভাড়া / অমাউণ্ট সীমা (On/Off)")
+            isChecked = fareLimitDef
+            setTextColor(textWhite)
+            textSize = 14f
+            setPadding(0, 8, 0, 8)
         }
-    }
-
-    private fun lightenColor(color: Int, factor: Float): Int {
-        val r = (Color.red(color) + (255 - Color.red(color)) * factor).toInt().coerceIn(0, 255)
-        val g = (Color.green(color) + (255 - Color.green(color)) * factor).toInt().coerceIn(0, 255)
-        val b = (Color.blue(color) + (255 - Color.blue(color)) * factor).toInt().coerceIn(0, 255)
-        return Color.rgb(r, g, b)
-    }
-
-    private fun darkenColor(color: Int, factor: Float): Int {
-        val r = (Color.red(color) * (1f - factor)).toInt().coerceIn(0, 255)
-        val g = (Color.green(color) * (1f - factor)).toInt().coerceIn(0, 255)
-        val b = (Color.blue(color) * (1f - factor)).toInt().coerceIn(0, 255)
-        return Color.rgb(r, g, b)
-    }
-
-    private fun generateQrMatrix(seedText: String): Bitmap {
-        val size = 21
-        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
-        val seed = seedText.hashCode()
-        for (y in 0 until size) {
-            for (x in 0 until size) {
-                val isFinder = (x < 5 && y < 5) || (x >= size - 5 && y < 5) || (x < 5 && y >= size - 5)
-                val isDark = if (isFinder) {
-                    x == 0 || x == 4 || y == 0 || y == 4 || (x in 1..3 && y in 1..3)
-                } else {
-                    (((x * 31 + y * 17) xor seed) and 1) == 0
-                }
-                bmp.setPixel(x, y, if (isDark) Color.BLACK else Color.WHITE)
-            }
-        }
-        return Bitmap.createScaledBitmap(bmp, 320, 320, false)
-    }
-}
+        val swOnlyOlaRapido = Switch(ctx).apply {
+            text = tr("⚡ Only Ola/Rapido", "⚡ केवल Ola/Rapido", "⚡ কেৱল Ola/Rapido")
+            isChecked = true
+            setTextColor(textWhite)
+            textSize
