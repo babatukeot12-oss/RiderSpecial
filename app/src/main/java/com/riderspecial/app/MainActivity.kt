@@ -27,7 +27,11 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.provider.Settings
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.text.InputType
 import android.util.Base64
 import android.view.Gravity
@@ -90,6 +94,10 @@ class MainActivity : Activity() {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var selectedLang = "EN" // "EN", "HI", "AS"
+    private var onNextTtsDone: (() -> Unit)? = null
+
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var pendingAiVoiceStart: (() -> Unit)? = null
 
     private var fbUrl = ""
     private var waUrl = ""
@@ -103,6 +111,7 @@ class MainActivity : Activity() {
     private var pendingEngineActivateCallback: (() -> Unit)? = null
     private val reqPickImage = 4091
     private val reqEngineLocationPerm = 4092
+    private val reqAudioPerm = 4093
 
     private var latestLat: Double? = null
     private var latestLng: Double? = null
@@ -195,6 +204,24 @@ class MainActivity : Activity() {
         tts = TextToSpeech(ctx) { status ->
             if (status == TextToSpeech.SUCCESS) {
                 applyTtsLanguageAndSoftVoice()
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {}
+                    override fun onDone(utteranceId: String?) {
+                        val cb = onNextTtsDone
+                        if (cb != null) {
+                            onNextTtsDone = null
+                            runOnUiThread { cb() }
+                        }
+                    }
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) {
+                        val cb = onNextTtsDone
+                        if (cb != null) {
+                            onNextTtsDone = null
+                            runOnUiThread { cb() }
+                        }
+                    }
+                })
                 ttsReady = true
             }
         }
@@ -213,90 +240,191 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun createVehicleIconDrawable(category: VehicleCategory, sizePx: Int = 96): Drawable {
+    private fun createVehicleIconDrawable(category: VehicleCategory, sizePx: Int = 112): Drawable {
         val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
         val tint = Color.parseColor(category.accentHex)
+        val s = sizePx.toFloat()
 
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#121E36")
-        }
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#0E182D") }
         val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = tint
             style = Paint.Style.STROKE
-            strokeWidth = sizePx * 0.045f
+            strokeWidth = s * 0.045f
         }
-        canvas.drawRoundRect(
-            RectF(4f, 4f, sizePx - 4f, sizePx - 4f),
-            sizePx * 0.22f,
-            sizePx * 0.22f,
-            bgPaint
-        )
-        canvas.drawRoundRect(
-            RectF(4f, 4f, sizePx - 4f, sizePx - 4f),
-            sizePx * 0.22f,
-            sizePx * 0.22f,
-            ringPaint
-        )
+        canvas.drawRoundRect(RectF(4f, 4f, s - 4f, s - 4f), s * 0.24f, s * 0.24f, bgPaint)
+        canvas.drawRoundRect(RectF(4f, 4f, s - 4f, s - 4f), s * 0.24f, s * 0.24f, ringPaint)
 
         val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = tint
             style = Paint.Style.FILL
         }
-        val wheelStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val whiteFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            style = Paint.Style.STROKE
-            strokeWidth = sizePx * 0.055f
+            style = Paint.Style.FILL
         }
-        val cabinPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#0B1324")
+        val darkFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#091122")
+            style = Paint.Style.FILL
+        }
+        val tireStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#E2E8F0")
+            style = Paint.Style.STROKE
+            strokeWidth = s * 0.055f
+        }
+        val goldPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#FACC15")
+            style = Paint.Style.FILL
         }
 
-        val s = sizePx.toFloat()
         when (category) {
-            VehicleCategory.BIKE, VehicleCategory.SCOOTY -> {
-                canvas.drawCircle(s * 0.26f, s * 0.68f, s * 0.14f, wheelStroke)
-                canvas.drawCircle(s * 0.74f, s * 0.68f, s * 0.14f, wheelStroke)
-                val framePath = Path().apply {
-                    moveTo(s * 0.26f, s * 0.68f)
-                    lineTo(s * 0.46f, s * 0.44f)
-                    lineTo(s * 0.68f, s * 0.44f)
-                    lineTo(s * 0.74f, s * 0.68f)
-                    moveTo(s * 0.46f, s * 0.44f)
-                    lineTo(s * 0.36f, s * 0.34f)
-                    moveTo(s * 0.68f, s * 0.44f)
-                    lineTo(s * 0.64f, s * 0.28f)
-                    lineTo(s * 0.75f, s * 0.28f)
-                }
-                canvas.drawPath(framePath, wheelStroke)
-                canvas.drawRoundRect(RectF(s * 0.42f, s * 0.39f, s * 0.60f, s * 0.48f), 6f, 6f, bodyPaint)
-            }
-            VehicleCategory.AUTO, VehicleCategory.E_RICKSHAW -> {
-                canvas.drawCircle(s * 0.28f, s * 0.70f, s * 0.12f, wheelStroke)
-                canvas.drawCircle(s * 0.72f, s * 0.70f, s * 0.12f, wheelStroke)
-                val autoPath = Path().apply {
-                    moveTo(s * 0.18f, s * 0.64f)
-                    lineTo(s * 0.22f, s * 0.30f)
-                    quadTo(s * 0.56f, s * 0.24f, s * 0.80f, s * 0.46f)
-                    lineTo(s * 0.82f, s * 0.64f)
+            VehicleCategory.BIKE -> {
+                // Sporty motorcycle side profile
+                canvas.drawCircle(s * 0.25f, s * 0.69f, s * 0.14f, tireStroke)
+                canvas.drawCircle(s * 0.75f, s * 0.69f, s * 0.14f, tireStroke)
+                canvas.drawCircle(s * 0.25f, s * 0.69f, s * 0.04f, bodyPaint)
+                canvas.drawCircle(s * 0.75f, s * 0.69f, s * 0.04f, bodyPaint)
+                // Exhaust & engine block
+                canvas.drawRoundRect(RectF(s * 0.34f, s * 0.56f, s * 0.62f, s * 0.67f), 6f, 6f, whiteFill)
+                // Tank & seat
+                val tankSeat = Path().apply {
+                    moveTo(s * 0.24f, s * 0.48f)
+                    lineTo(s * 0.44f, s * 0.48f)
+                    quadTo(s * 0.55f, s * 0.37f, s * 0.66f, s * 0.43f)
+                    lineTo(s * 0.63f, s * 0.54f)
+                    lineTo(s * 0.28f, s * 0.54f)
                     close()
                 }
-                canvas.drawPath(autoPath, bodyPaint)
-                canvas.drawRoundRect(RectF(s * 0.29f, s * 0.35f, s * 0.56f, s * 0.50f), 5f, 5f, cabinPaint)
+                canvas.drawPath(tankSeat, bodyPaint)
+                // Handle & front fork + headlight
+                val fork = Path().apply {
+                    moveTo(s * 0.63f, s * 0.33f)
+                    lineTo(s * 0.75f, s * 0.69f)
+                    moveTo(s * 0.58f, s * 0.31f)
+                    lineTo(s * 0.70f, s * 0.34f)
+                }
+                canvas.drawPath(fork, tireStroke)
+                canvas.drawCircle(s * 0.73f, s * 0.41f, s * 0.045f, goldPaint)
             }
-            VehicleCategory.CAB, VehicleCategory.EV -> {
-                canvas.drawCircle(s * 0.28f, s * 0.70f, s * 0.12f, wheelStroke)
-                canvas.drawCircle(s * 0.72f, s * 0.70f, s * 0.12f, wheelStroke)
-                canvas.drawRoundRect(RectF(s * 0.16f, s * 0.46f, s * 0.84f, s * 0.66f), 10f, 10f, bodyPaint)
-                val roofPath = Path().apply {
-                    moveTo(s * 0.28f, s * 0.47f)
-                    lineTo(s * 0.37f, s * 0.31f)
-                    lineTo(s * 0.65f, s * 0.31f)
-                    lineTo(s * 0.74f, s * 0.47f)
+            VehicleCategory.SCOOTY -> {
+                // Front-facing modern EV scooty with mirrors, apron & bolt
+                // Mirrors
+                canvas.drawLine(s * 0.34f, s * 0.29f, s * 0.27f, s * 0.21f, tireStroke)
+                canvas.drawLine(s * 0.66f, s * 0.29f, s * 0.73f, s * 0.21f, tireStroke)
+                canvas.drawOval(RectF(s * 0.21f, s * 0.17f, s * 0.32f, s * 0.24f), bodyPaint)
+                canvas.drawOval(RectF(s * 0.68f, s * 0.17f, s * 0.79f, s * 0.24f), bodyPaint)
+                // Handlebar & headlight
+                canvas.drawRoundRect(RectF(s * 0.30f, s * 0.27f, s * 0.70f, s * 0.36f), 10f, 10f, bodyPaint)
+                canvas.drawOval(RectF(s * 0.43f, s * 0.28f, s * 0.57f, s * 0.35f), whiteFill)
+                // Front apron shield
+                val apron = Path().apply {
+                    moveTo(s * 0.36f, s * 0.38f)
+                    lineTo(s * 0.64f, s * 0.38f)
+                    lineTo(s * 0.60f, s * 0.66f)
+                    lineTo(s * 0.40f, s * 0.66f)
                     close()
                 }
-                canvas.drawPath(roofPath, bodyPaint)
-                canvas.drawRoundRect(RectF(s * 0.39f, s * 0.35f, s * 0.63f, s * 0.45f), 4f, 4f, cabinPaint)
+                canvas.drawPath(apron, bodyPaint)
+                // Front wheel & mudguard
+                canvas.drawRoundRect(RectF(s * 0.45f, s * 0.63f, s * 0.55f, s * 0.84f), 6f, 6f, whiteFill)
+                // Electric lightning accent
+                val bolt = Path().apply {
+                    moveTo(s * 0.52f, s * 0.42f)
+                    lineTo(s * 0.45f, s * 0.52f)
+                    lineTo(s * 0.51f, s * 0.52f)
+                    lineTo(s * 0.48f, s * 0.61f)
+                    lineTo(s * 0.56f, s * 0.50f)
+                    lineTo(s * 0.50f, s * 0.50f)
+                    close()
+                }
+                canvas.drawPath(bolt, goldPaint)
+            }
+            VehicleCategory.AUTO -> {
+                // Classic Indian 3-wheeler auto rickshaw
+                canvas.drawCircle(s * 0.27f, s * 0.72f, s * 0.11f, tireStroke)
+                canvas.drawCircle(s * 0.73f, s * 0.72f, s * 0.11f, tireStroke)
+                val canopy = Path().apply {
+                    moveTo(s * 0.20f, s * 0.66f)
+                    lineTo(s * 0.22f, s * 0.28f)
+                    quadTo(s * 0.58f, s * 0.22f, s * 0.78f, s * 0.46f)
+                    lineTo(s * 0.82f, s * 0.66f)
+                    close()
+                }
+                canvas.drawPath(canopy, bodyPaint)
+                canvas.drawRoundRect(RectF(s * 0.28f, s * 0.34f, s * 0.55f, s * 0.50f), 6f, 6f, darkFill)
+                canvas.drawRoundRect(RectF(s * 0.59f, s * 0.36f, s * 0.72f, s * 0.50f), 6f, 6f, whiteFill)
+                canvas.drawCircle(s * 0.81f, s * 0.55f, s * 0.04f, whiteFill)
+            }
+            VehicleCategory.E_RICKSHAW -> {
+                // Front-facing Indian E-Rickshaw (Toto) with roof canopy, windshield, handlebar & 3 wheels
+                // Roof canopy
+                canvas.drawRoundRect(RectF(s * 0.22f, s * 0.18f, s * 0.78f, s * 0.26f), 8f, 8f, bodyPaint)
+                // Support pillars
+                canvas.drawLine(s * 0.26f, s * 0.25f, s * 0.24f, s * 0.52f, tireStroke)
+                canvas.drawLine(s * 0.74f, s * 0.25f, s * 0.76f, s * 0.52f, tireStroke)
+                // Windshield
+                canvas.drawRoundRect(RectF(s * 0.31f, s * 0.28f, s * 0.69f, s * 0.43f), 6f, 6f, whiteFill)
+                canvas.drawRoundRect(RectF(s * 0.34f, s * 0.30f, s * 0.66f, s * 0.41f), 4f, 4f, darkFill)
+                // Lower body & front apron
+                canvas.drawRoundRect(RectF(s * 0.23f, s * 0.50f, s * 0.77f, s * 0.70f), 8f, 8f, bodyPaint)
+                // Side & front wheels
+                canvas.drawRoundRect(RectF(s * 0.21f, s * 0.66f, s * 0.29f, s * 0.81f), 4f, 4f, whiteFill)
+                canvas.drawRoundRect(RectF(s * 0.71f, s * 0.66f, s * 0.79f, s * 0.81f), 4f, 4f, whiteFill)
+                canvas.drawRoundRect(RectF(s * 0.45f, s * 0.63f, s * 0.55f, s * 0.84f), 5f, 5f, whiteFill)
+                // Central headlight & electric bolt
+                canvas.drawCircle(s * 0.50f, s * 0.52f, s * 0.055f, goldPaint)
+                val bolt = Path().apply {
+                    moveTo(s * 0.52f, s * 0.11f)
+                    lineTo(s * 0.46f, s * 0.17f)
+                    lineTo(s * 0.51f, s * 0.17f)
+                    lineTo(s * 0.48f, s * 0.23f)
+                    lineTo(s * 0.55f, s * 0.16f)
+                    lineTo(s * 0.50f, s * 0.16f)
+                    close()
+                }
+                canvas.drawPath(bolt, goldPaint)
+            }
+            VehicleCategory.CAB -> {
+                // Taxi / Cab sedan with roof taxi sign
+                canvas.drawRoundRect(RectF(s * 0.41f, s * 0.22f, s * 0.59f, s * 0.29f), 4f, 4f, goldPaint)
+                val roof = Path().apply {
+                    moveTo(s * 0.27f, s * 0.47f)
+                    lineTo(s * 0.36f, s * 0.30f)
+                    lineTo(s * 0.64f, s * 0.30f)
+                    lineTo(s * 0.73f, s * 0.47f)
+                    close()
+                }
+                canvas.drawPath(roof, bodyPaint)
+                canvas.drawRoundRect(RectF(s * 0.37f, s * 0.34f, s * 0.63f, s * 0.45f), 4f, 4f, darkFill)
+                canvas.drawRoundRect(RectF(s * 0.15f, s * 0.46f, s * 0.85f, s * 0.67f), 10f, 10f, bodyPaint)
+                canvas.drawCircle(s * 0.28f, s * 0.70f, s * 0.11f, tireStroke)
+                canvas.drawCircle(s * 0.72f, s * 0.70f, s * 0.11f, tireStroke)
+                canvas.drawCircle(s * 0.80f, s * 0.54f, s * 0.035f, whiteFill)
+            }
+            VehicleCategory.EV -> {
+                // Electric car with lightning emblem
+                val roof = Path().apply {
+                    moveTo(s * 0.27f, s * 0.47f)
+                    lineTo(s * 0.36f, s * 0.30f)
+                    lineTo(s * 0.64f, s * 0.30f)
+                    lineTo(s * 0.73f, s * 0.47f)
+                    close()
+                }
+                canvas.drawPath(roof, bodyPaint)
+                canvas.drawRoundRect(RectF(s * 0.37f, s * 0.34f, s * 0.63f, s * 0.45f), 4f, 4f, darkFill)
+                canvas.drawRoundRect(RectF(s * 0.15f, s * 0.46f, s * 0.85f, s * 0.67f), 10f, 10f, bodyPaint)
+                canvas.drawCircle(s * 0.28f, s * 0.70f, s * 0.11f, tireStroke)
+                canvas.drawCircle(s * 0.72f, s * 0.70f, s * 0.11f, tireStroke)
+                val bolt = Path().apply {
+                    moveTo(s * 0.52f, s * 0.48f)
+                    lineTo(s * 0.45f, s * 0.57f)
+                    lineTo(s * 0.51f, s * 0.57f)
+                    lineTo(s * 0.48f, s * 0.65f)
+                    lineTo(s * 0.56f, s * 0.55f)
+                    lineTo(s * 0.50f, s * 0.55f)
+                    close()
+                }
+                canvas.drawPath(bolt, goldPaint)
             }
         }
         return BitmapDrawable(resources, bmp)
@@ -310,6 +438,127 @@ class MainActivity : Activity() {
             tr("is off", "बंद है", "বন্ধ হৈছে")
         }
         speakText(ctx, true, "$featureName $stateWord")
+    }
+
+    private fun getAiQuestionsRemainingToday(ctx: Context, riderId: String): Int {
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val windowStart = prefs.getLong("ai_q_window_$riderId", 0L)
+        val used = prefs.getInt("ai_q_used_$riderId", 0)
+        if (windowStart == 0L || (now - windowStart) >= TimeUnit.HOURS.toMillis(24)) {
+            return 3
+        }
+        return (3 - used).coerceIn(0, 3)
+    }
+
+    private fun consumeOneAiQuestion(ctx: Context, riderId: String): Int {
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val windowStart = prefs.getLong("ai_q_window_$riderId", 0L)
+        val expired = windowStart == 0L || (now - windowStart) >= TimeUnit.HOURS.toMillis(24)
+        val newWindow = if (expired) now else windowStart
+        val newUsed = if (expired) 1 else (prefs.getInt("ai_q_used_$riderId", 0) + 1)
+        prefs.edit()
+            .putLong("ai_q_window_$riderId", newWindow)
+            .putInt("ai_q_used_$riderId", newUsed)
+            .apply()
+        return (3 - newUsed).coerceIn(0, 3)
+    }
+
+    private fun answerRiderHindiQuestion(spokenRaw: String): String {
+        val q = spokenRaw.trim().lowercase(Locale("hi", "IN"))
+        return when {
+            q.contains("पिकअप") || q.contains("pickup") || q.contains("ड्रॉप") || q.contains("drop") ||
+                q.contains("किराया") || q.contains("फेयर") || q.contains("fare") || q.contains("अमाउंट") || q.contains("ऑफ") ->
+                "पिकअप, ड्रॉप और किराया तीनों ऑफ रहने और ऑटो एक्सेप्ट ऑन रहने पर दूरी या किराए की कोई रोक नहीं लगती। जब कोई नियम ऑन रहता है, तो उसी तय सीमा के अनुसार नियम काम करता है।"
+            q.contains("इंजन") || q.contains("engine") || q.contains("लोकेशन") || q.contains("gps") || q.contains("location") ->
+                "ऊपर दाएँ कोने के तीन डॉट मेनू से एक्टिवेट इंजन दबाएं, और फ़ोन में लोकेशन व जीपीएस चालू रखें। इससे आपकी लाइव लोकेशन अपडेट होती है और शेयर लाइव लोकेशन से परिवार या दोस्त को लिंक भेज सकते हैं।"
+            q.contains("स्क्रीनशॉट") || q.contains("screenshot") || q.contains("गैलरी") || q.contains("gallery") ||
+                q.contains("एक्सेसिबिलिटी") || q.contains("accessibility") ->
+                "फ़ोन की एक्सेसिबिलिटी सेटिंग्स ऑन रखना ज़रूरी है ताकि स्क्रीनशॉट क्लिक हो सके और आपकी गैलरी में सेव हो सके।"
+            q.contains("पार्सल") || q.contains("parcel") ->
+                "पार्सल बटन ऑन रखने पर केवल पार्सल मोड सक्रिय रहता है, और सामान्य काम के लिए आप इसे ऑफ रख सकते हैं।"
+            q.contains("भाषा") || q.contains("language") || q.contains("हिंदी") || q.contains("असमिया") ->
+                "ऊपर तीन डॉट मेनू में जाकर लैंग्वेज चुनें, वहाँ से आप इंग्लिश, हिन्दी या असमिया भाषा चुन सकते हैं।"
+            q.contains("चैट") || q.contains("chat") || q.contains("एडमिन") || q.contains("admin") || q.contains("फोटो") ->
+                "तीन डॉट मेनू के लाइव चैट से आप एडमिन को मैसेज और फ़ोटो भेज सकते हैं। ज़रूरत पड़ने पर एडमिन आपसे संपर्क करेंगे।"
+            else ->
+                "आपका सवाल सुना गया। इस ऐप में पिकअप, ड्रॉप और किराए के ऑन-ऑफ़ स्विच सेट करके सेव करें, ऊपर तीन डॉट मेनू से इंजन एक्टिव करें और लोकेशन व एक्सेसिबिलिटी चालू रखें।"
+        }
+    }
+
+    private fun handleAiVoiceHelpClick(ctx: Context, riderId: String, onQuotaChanged: () -> Unit) {
+        val remaining = getAiQuestionsRemainingToday(ctx, riderId)
+        if (remaining <= 0) {
+            speakText(
+                ctx,
+                true,
+                "आपका आज का तीन सवाल पूरा हुआ। आप कल से फिर से ट्राई करिए।"
+            )
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != 0
+        ) {
+            pendingAiVoiceStart = { handleAiVoiceHelpClick(ctx, riderId, onQuotaChanged) }
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), reqAudioPerm)
+            return
+        }
+
+        speakText(
+            ctx,
+            true,
+            "कैप्टन स्मार्ट प्रो में आपको मैं किस तरह से मदद कर सकता हूं?",
+            onDone = {
+                startSilentHindiVoiceListener(ctx, riderId, onQuotaChanged)
+            }
+        )
+    }
+
+    private fun startSilentHindiVoiceListener(ctx: Context, riderId: String, onQuotaChanged: () -> Unit) {
+        try {
+            if (!SpeechRecognizer.isRecognitionAvailable(ctx)) {
+                speakText(ctx, true, "आपके फ़ोन में वॉइस पहचान सेवा उपलब्ध नहीं है।")
+                return
+            }
+            speechRecognizer?.destroy()
+            val recognizer = SpeechRecognizer.createSpeechRecognizer(ctx)
+            speechRecognizer = recognizer
+            recognizer.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {}
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onError(error: Int) {
+                    speakText(ctx, true, "आवाज़ साफ़ सुनाई नहीं दी, कृपया फिर से दबाकर बोलें।")
+                }
+                override fun onResults(results: Bundle?) {
+                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    val spoken = matches?.firstOrNull()?.trim().orEmpty()
+                    if (spoken.isEmpty()) {
+                        speakText(ctx, true, "कृपया अपना सवाल फिर से बोलें।")
+                        return
+                    }
+                    consumeOneAiQuestion(ctx, riderId)
+                    onQuotaChanged()
+                    val reply = answerRiderHindiQuestion(spoken)
+                    speakText(ctx, true, reply)
+                }
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN")
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            }
+            recognizer.startListening(intent)
+        } catch (_: Exception) {
+            speakText(ctx, true, "माइक शुरू नहीं हो पाया, कृपया माइक परमिशन जांचें।")
+        }
     }
 
     private fun countWords(text: String): Int {
@@ -474,6 +723,14 @@ class MainActivity : Activity() {
                 showPermissionRequiredGateDialog(this) {
                     callback?.invoke()
                 }
+            }
+        } else if (requestCode == reqAudioPerm) {
+            val aiCb = pendingAiVoiceStart
+            pendingAiVoiceStart = null
+            if (grantResults.isNotEmpty() && grantResults[0] == 0) {
+                aiCb?.invoke()
+            } else {
+                speakText(this, true, "माइक की अनुमति नहीं मिली है।")
             }
         }
     }
@@ -739,8 +996,9 @@ class MainActivity : Activity() {
         if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
             engine.language = if (selectedLang == "AS") Locale("hi", "IN") else Locale.US
         }
-        engine.setPitch(1.08f)
-        engine.setSpeechRate(0.95f)
+        // 100 - 25 = 75% (0.75f) slow, calm voice speed
+        engine.setPitch(1.06f)
+        engine.setSpeechRate(0.75f)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 val voices = engine.voices
@@ -801,7 +1059,7 @@ Dear Rider Brothers,
 Respect and salutation to every captain working hard across weather, traffic, and daily challenges to support family and dreams. Captain Smart Pro is designed to make your daily work smooth, clear, and organized—whether you ride Bike, Auto, Cab, E-Rickshaw, EV, or Scooty.
 
 1. How Rules Work (Pickup, Drop, Fare & Auto Accept)
-• Pickup Distance (Km), Drop Distance (Km), and Ride Amount / Fare (₹) each have their own On/Off switch.
+• Pickup Distance (Km), Drop Distance (Km), and Ride Amount / Fare (₹) each have their own On/Off switch on the right side.
 • When a rule is ON, the app checks according to that set distance or fare limit.
 • When Pickup, Drop, and Ride Amount / Fare are all OFF and Auto Accept is ON, there is no distance or fare filter restriction.
 • Always tap SAVE RIDER PREFERENCES after updating rules.
@@ -812,6 +1070,7 @@ Respect and salutation to every captain working hard across weather, traffic, an
 3) Engine, Location & Accessibility: Open top-right ⋮ menu and tap Activate Engine. Keep Phone Location (GPS) and Accessibility Settings ON. Accessibility Settings must be ON so screenshots can be captured and saved to Gallery.
 4) Voice / TTS Alerts: Toggling switches and buttons announces On/Off status when Media Volume is up.
 5) Share Live Location: Tap SHARE LIVE LOCATION to share your current location link and status with family or friends via WhatsApp or other apps.
+6) AI Voice Help (3 Questions / 24h): Tap AI HELP to ask up to 3 voice questions in Hindi every 24 hours.
 
 3. Language, Listen Button & Support (Live Chat, Photo & Recording)
 • Choose English, हिन्दी, or অসমীয়া from ⋮ > Language; this About guide updates in your chosen language.
@@ -827,7 +1086,7 @@ Captain Smart Pro — राइडर भाइयों का अपना स
 सड़क पर हर मौसम, हर ट्रैफ़िक और हर चुनौती के बीच मेहनत करके अपने परिवार और सपनों को आगे बढ़ाने वाले हर कप्तान को दिल से सलाम। Captain Smart Pro इसी सोच के साथ बनाया गया है कि आपके रोज़ के काम को आसान, साफ़ और व्यवस्थित बनाया जाए। चाहे आप Bike, Auto, Cab, E-Rickshaw, EV या Scooty चलाते हों—सही नियम और सही आदतों से काम करना हमेशा फ़ायदेमंद होता है।
 
 1. नियम कैसे काम करते हैं? (Pickup, Drop, Fare और Auto Accept)
-• Pickup Distance (Km), Drop Distance (Km) और Ride Amount / Fare (₹)—हर नियम के साथ उसका On/Off स्विच दिया गया है।
+• Pickup Distance (Km), Drop Distance (Km) और Ride Amount / Fare (₹)—हर नियम की लाइन में दाएँ तरफ़ उसका On/Off स्विच दिया गया है।
 • जब कोई नियम On रहता है, तो ऐप उसी तय दूरी या किराए के हिसाब से नियम लागू करता है।
 • जब Pickup, Drop और Ride Amount / Fare तीनों Off रहते हैं और Auto Accept On रहता है, तो ऐप की किसी भी दूरी या किराए वाले नियम की रोक नहीं लगती।
 • नियम बदलने के बाद SAVE RIDER PREFERENCES दबाना न भूलें।
@@ -838,6 +1097,7 @@ Captain Smart Pro — राइडर भाइयों का अपना स
 3) इंजन, लोकेशन और एक्सेसिबिलिटी: ऊपर ⋮ मेनू से Activate Engine दबाएं। फ़ोन में Location (GPS) और Accessibility Settings चालू रखें। Accessibility Settings ऑन रहना ज़रूरी है ताकि स्क्रीनशॉट क्लिक हो और गैलरी में सेव हो सके।
 4) आवाज़ (TTS) की सूचना: बटन या स्विच On/Off करने पर आवाज़ में सूचना मिलती है (फ़ोन की मीडिया आवाज़ चालू रखें)।
 5) लाइव लोकेशन शेयर करना: SHARE LIVE LOCATION दबाकर अपनी ताज़ा लोकेशन का लिंक और स्थिति WhatsApp या अन्य ऐप से घर, परिवार या दोस्त को भेजें।
+6) AI वॉइस मदद (24 घंटे में 3 सवाल): AI HELP दबाकर आप 24 घंटे में 3 बार हिन्दी में बोलकर सवाल पूछ सकते हैं और अगले दिन फिर से 3 सवाल पूछ सकेंगे।
 
 3. भाषा, सुनने का बटन और सहायता (Live Chat, फ़ोटो और रिकॉर्डिंग)
 • ⋮ मेनू से Language चुनकर English, हिन्दी या অসমীয়া में ऐप और About पढ़ सकते हैं।
@@ -853,7 +1113,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 পৰিয়াল আৰু সপোন আগবঢ়াই নিবলৈ ৰ'দ-বৰষুণ, যান-জঁট আৰু প্ৰত্যাহ্বানৰ মাজত পৰিশ্ৰম কৰা প্ৰতিগৰাকী কেপ্টেইনলৈ আন্তৰিক শ্ৰদ্ধা। Bike, Auto, Cab, E-Rickshaw, EV বা Scooty যিয়েই নচলাওক—সঠিক নিয়ম আৰু অভ্যাসে কাম সহজ আৰু সুশৃংখল কৰে।
 
 ১. নিয়ম কেনেকৈ চলে? (Pickup, Drop, Fare আৰু Auto Accept)
-• Pickup Distance (Km), Drop Distance (Km) আৰু Ride Amount / Fare (₹)—প্ৰতিটোৰ বাবে On/Off চুইচ আছে।
+• Pickup Distance (Km), Drop Distance (Km) আৰু Ride Amount / Fare (₹)—প্ৰতিটোৰ সোঁফালে On/Off চুইচ আছে।
 • নিয়ম ON থাকিলে নিৰ্ধাৰিত দূৰত্ব বা ভাড়া অনুসৰি পৰীক্ষা কৰা হয়।
 • Pickup, Drop আৰু Ride Amount / Fare তিনিওটা OFF আৰু Auto Accept ON থাকিলে কোনো দূৰত্ব বা ভাড়াৰ বাধা নাথাকে।
 • সলনি কৰাৰ পাছত SAVE RIDER PREFERENCES টিপিব।
@@ -864,6 +1124,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 ৩) ইঞ্জিন, লোকেচন আৰু এক্সেচিবিলিটি: ওপৰৰ ⋮ মেনুৰ পৰা Activate Engine টিপক। Location (GPS) আৰু Accessibility Settings ON ৰাখক—স্ক্ৰীণশ্বট লৈ গেলাৰীত ছেভ হ'বলৈ Accessibility Settings ON থকাটো প্ৰয়োজন।
 ৪) আৱাজ (TTS): চুইচ/বুটাম On/Off কৰিলে আৱাজ শুনা যায় (Media Volume অন ৰাখক)।
 ৫) লাইভ লোকেচন শ্বেয়াৰ: SHARE LIVE LOCATION টিপি পৰিয়াল বা বন্ধুক লোকেচন লিংক পঠিয়াব পাৰে।
+৬) AI সহায়: ২৪ ঘণ্টাত ৩ বাৰ হিন্দীত প্ৰশ্ন সুধিব পাৰিব।
 
 ৩. ভাষা, Play বুটাম আৰু সহায়
 • ⋮ > Language ৰ পৰা English, हिन्दी বা অসমীয়া বাছনি কৰক।
@@ -1400,7 +1661,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     if (isChosen) accentGreenBright else borderSlate,
                     12f
                 )
-                box.alpha = if (isChosen) 1.0f else 0.75f
+                box.alpha = if (isChosen) 1.0f else 0.78f
             }
             vehicleStatusTv.text = "Selected Vehicle: ${selectedVehicle?.label ?: "None"}"
         }
@@ -1429,7 +1690,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     }
                     addView(ImageView(ctx).apply {
                         setImageDrawable(createVehicleIconDrawable(vType))
-                        layoutParams = LinearLayout.LayoutParams(54, 54)
+                        layoutParams = LinearLayout.LayoutParams(62, 62)
                     })
                     addView(TextView(ctx).apply {
                         text = vType.label
@@ -2868,7 +3129,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 
         val riderVehicleBadge = ImageView(ctx).apply {
             setImageDrawable(createVehicleIconDrawable(vehicleCat))
-            layoutParams = LinearLayout.LayoutParams(48, 48).apply { leftMargin = 8 }
+            layoutParams = LinearLayout.LayoutParams(52, 52).apply { leftMargin = 8 }
         }
 
         val brandCol = LinearLayout(ctx).apply {
@@ -2983,50 +3244,33 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             setPadding(0, 0, 0, 10)
         }
 
-        val swPickupLimit = Switch(ctx).apply {
-            text = tr("📍 Pickup Limit (On/Off)", "📍 पिकअप सीमा (On/Off)", "📍 পিকআপ সীমা (On/Off)")
-            isChecked = pickupLimitDef
-            setTextColor(textWhite)
-            textSize = 14f
-            setPadding(0, 8, 0, 8)
-        }
-        val swDropLimit = Switch(ctx).apply {
-            text = tr("🏁 Drop Limit (On/Off)", "🏁 ड्रॉप सीमा (On/Off)", "🏁 ড্ৰপ সীমা (On/Off)")
-            isChecked = dropLimitDef
-            setTextColor(textWhite)
-            textSize = 14f
-            setPadding(0, 8, 0, 8)
-        }
-        val swFareLimit = Switch(ctx).apply {
-            text = tr("💰 Fare / Amount Limit (On/Off)", "💰 किराया / अमाउंट सीमा (On/Off)", "💰 ভাড়া / অমাউণ্ট সীমা (On/Off)")
-            isChecked = fareLimitDef
-            setTextColor(textWhite)
-            textSize = 14f
-            setPadding(0, 8, 0, 8)
-        }
+        val swPickupLimit = Switch(ctx).apply { isChecked = pickupLimitDef }
+        val swDropLimit = Switch(ctx).apply { isChecked = dropLimitDef }
+        val swFareLimit = Switch(ctx).apply { isChecked = fareLimitDef }
+
         val swOnlyOlaRapido = Switch(ctx).apply {
-            text = tr("⚡ Only Ola/Rapido", "⚡ केवल Ola/Rapido", "⚡ কেৱল Ola/Rapido")
+            text = tr("Only Ola/Rapido", "केवल Ola/Rapido", "কেৱল Ola/Rapido")
             isChecked = true
             setTextColor(textWhite)
             textSize = 14f
             setPadding(0, 8, 0, 8)
         }
         val swSoundTts = Switch(ctx).apply {
-            text = tr("🔊 Play Sound / TTS", "🔊 आवाज़ / TTS चलाएं", "🔊 আৱাজ / TTS চলাওক")
+            text = tr("Play Sound / TTS", "आवाज़ / TTS चलाएं", "আৱাজ / TTS চলাওক")
             isChecked = true
             setTextColor(textWhite)
             textSize = 14f
             setPadding(0, 8, 0, 8)
         }
         val swAutoAccept = Switch(ctx).apply {
-            text = tr("🤖 Auto Accept", "🤖 ऑटो एक्सेप्ट", "🤖 অটো এক্সেপ্ট")
+            text = tr("Auto Accept", "ऑटो एक्सेप्ट", "অটো এক্সেপ্ট")
             isChecked = true
             setTextColor(textWhite)
             textSize = 14f
             setPadding(0, 8, 0, 8)
         }
         val swScreenshot = Switch(ctx).apply {
-            text = tr("📸 Screenshot Save to Gallery", "📸 स्क्रीनशॉट गैलरी में सेव करें", "📸 স্ক্ৰীণশ্বট গেলাৰীত ছেভ কৰক")
+            text = tr("Screenshot Save to Gallery", "स्क्रीनशॉट गैलरी में सेव करें", "স্ক্ৰীণশ্বট গেলাৰীত ছেভ কৰক")
             isChecked = true
             setTextColor(textWhite)
             textSize = 14f
@@ -3283,7 +3527,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { bottomMargin = 10 }
+            ).apply { bottomMargin = 12 }
         }
         quickRuleRow.addView(makeStyledButton(
             ctx,
@@ -3301,49 +3545,72 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 savePrefsAction()
             }
         })
-        quickRuleRow.addView(makeStyledButton(
+
+        lateinit var aiHelpMicBtn: Button
+        fun refreshAiButtonLabel() {
+            val left = getAiQuestionsRemainingToday(ctx, riderId)
+            aiHelpMicBtn.text = tr(
+                "🎙️ AI HELP ($left/3)",
+                "🎙️ AI मदद ($left/3)",
+                "🎙️ AI সহায় ($left/3)"
+            )
+        }
+
+        aiHelpMicBtn = makeStyledButton(
             ctx,
-            tr("↩️ Default Values", "↩️ डिफ़ॉल्ट मान", "↩️ ডিফল্ট মান"),
-            cardElevated
+            "🎙️ AI HELP (${getAiQuestionsRemainingToday(ctx, riderId)}/3)",
+            accentBlue
         ).apply {
             textSize = 11f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 leftMargin = 6
             }
             setOnClickListener {
-                pickupEt.setText("1.0")
-                dropEt.setText("4.0")
-                amountEt.setText("20")
-                savePrefsAction()
+                handleAiVoiceHelpClick(ctx, riderId) {
+                    refreshAiButtonLabel()
+                }
             }
-        })
+        }
+        quickRuleRow.addView(aiHelpMicBtn)
         rulesCard.addView(quickRuleRow)
 
-        rulesCard.addView(TextView(ctx).apply {
-            text = tr("📍 Pickup Distance (Km) — Active when Pickup Limit is ON", "📍 पिकअप दूरी (किमी) — पिकअप सीमा ON होने पर लागू", "📍 পিকআপ দূৰত্ব (কিঃমিঃ) — পিকআপ সীমা ON হ'লে প্ৰযোজ্য")
-            textSize = 12f
-            setTextColor(textMuted)
-        })
+        fun buildCleanFilterRow(labelText: String, toggleSwitch: Switch): LinearLayout {
+            return LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, 4, 0, 4)
+                addView(TextView(ctx).apply {
+                    text = labelText
+                    textSize = 13f
+                    setTypeface(null, Typeface.BOLD)
+                    setTextColor(textWhite)
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                })
+                addView(toggleSwitch)
+            }
+        }
+
+        // Clean single-line headers with On/Off switch on right side (no cross/cut icons)
+        rulesCard.addView(buildCleanFilterRow(
+            tr("Pickup Distance (Km)", "पिकअप दूरी (किमी)", "পিকআপ দূৰত্ব (কিঃমিঃ)"),
+            swPickupLimit
+        ))
         rulesCard.addView(pickupEt)
-        rulesCard.addView(swPickupLimit)
-        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 6) })
+        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 10) })
 
-        rulesCard.addView(TextView(ctx).apply {
-            text = tr("🏁 Drop Distance (Km) — Active when Drop Limit is ON", "🏁 ड्रॉप दूरी (किमी) — ड्रॉप सीमा ON होने पर लागू", "🏁 ড্ৰপ দূৰত্ব (কিঃমিঃ) — ড্ৰপ সীমা ON হ'লে প্ৰযোজ্য")
-            textSize = 12f
-            setTextColor(textMuted)
-        })
+        rulesCard.addView(buildCleanFilterRow(
+            tr("Drop Distance (Km)", "ड्रॉप दूरी (किमी)", "ড্ৰপ দূৰত্ব (কিঃমিঃ)"),
+            swDropLimit
+        ))
         rulesCard.addView(dropEt)
-        rulesCard.addView(swDropLimit)
-        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 6) })
+        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 10) })
 
-        rulesCard.addView(TextView(ctx).apply {
-            text = tr("💰 Ride Amount / Fare (₹) — Active when Fare Limit is ON", "💰 राइड अमाउंट / किराया (₹) — किराया सीमा ON होने पर लागू", "💰 ৰাইড ভাড়া / অমাউণ্ট (₹) — ভাড়া সীমা ON হ'লে প্ৰযোজ্য")
-            textSize = 12f
-            setTextColor(textMuted)
-        })
+        rulesCard.addView(buildCleanFilterRow(
+            tr("Ride Amount / Fare (₹)", "राइड अमाउंट / किराया (₹)", "ৰাইড ভাড়া / অমাউণ্ট (₹)"),
+            swFareLimit
+        ))
         rulesCard.addView(amountEt)
-        rulesCard.addView(swFareLimit)
+        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
 
         rulesCard.addView(swOnlyOlaRapido)
         rulesCard.addView(swSoundTts)
@@ -3504,17 +3771,31 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         }
     }
 
-    private fun speakText(ctx: Context, enabled: Boolean, message: String) {
-        if (!enabled) return
+    private fun speakText(ctx: Context, enabled: Boolean, message: String, onDone: (() -> Unit)? = null) {
+        if (!enabled) {
+            onDone?.invoke()
+            return
+        }
+        onNextTtsDone = onDone
         if (ttsReady && tts != null) {
-            tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "csp_tts")
+            val params = Bundle().apply {
+                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "csp_tts")
+            }
+            tts?.speak(message, TextToSpeech.QUEUE_FLUSH, params, "csp_tts")
         } else {
             Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
+            val cb = onNextTtsDone
+            onNextTtsDone = null
+            cb?.invoke()
         }
     }
 
     override fun onDestroy() {
         stopLocationLoop()
+        try {
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {
+        }
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()
