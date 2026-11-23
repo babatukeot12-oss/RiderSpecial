@@ -50,7 +50,7 @@ import java.util.concurrent.TimeUnit
 class MainActivity : Activity() {
 
     private val adminPassport = "dinakeot1990"
-    private var configurableTrialDays = 3L
+    private var configurableTrialDays = 30L
 
     private var plan1MonthPrice = 49
     private var plan2MonthPrice = 70
@@ -58,7 +58,7 @@ class MainActivity : Activity() {
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
-    private var selectedLang = "EN"
+    private var selectedLang = "EN" // "EN", "HI", "AS"
 
     private var fbUrl = ""
     private var waUrl = ""
@@ -161,7 +161,7 @@ class MainActivity : Activity() {
 
         tts = TextToSpeech(ctx) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                applyTtsLanguage()
+                applyTtsLanguageAndSoftVoice()
                 ttsReady = true
             }
         }
@@ -172,10 +172,33 @@ class MainActivity : Activity() {
         loadAndStart(ctx, hardwareId)
     }
 
+    private fun tr(en: String, hi: String, asText: String): String {
+        return when (selectedLang) {
+            "HI" -> hi
+            "AS" -> asText
+            else -> en
+        }
+    }
+
     private fun countWords(text: String): Int {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return 0
         return trimmed.split(Regex("\\s+")).size
+    }
+
+    private fun computeRemainingDays(
+        trialStart: Long,
+        activeUntil: Long,
+        customTrialDays: Long?,
+        nowMillis: Long
+    ): Long {
+        val effectiveTrialDays = (customTrialDays ?: configurableTrialDays).coerceAtLeast(0L)
+        val trialEnd = if (trialStart > 0L) trialStart + TimeUnit.DAYS.toMillis(effectiveTrialDays) else 0L
+        val validUntil = maxOf(activeUntil, trialEnd)
+        if (validUntil <= nowMillis) return 0L
+        val diffMillis = validUntil - nowMillis
+        val dayMs = TimeUnit.DAYS.toMillis(1)
+        return (diffMillis + dayMs - 1L) / dayMs
     }
 
     @Suppress("DEPRECATION")
@@ -241,38 +264,38 @@ class MainActivity : Activity() {
     }
 
     private fun showDeviceGpsSettingsDialog(ctx: Context) {
-        val isHi = selectedLang == "HI"
         AlertDialog.Builder(ctx)
-            .setTitle(if (isHi) "📡 फ़ोन का GPS / Location बंद है" else "📡 Phone GPS / Location is OFF")
+            .setTitle(tr("📡 Phone GPS / Location is OFF", "📡 फ़ोन का GPS / Location बंद है", "📡 ফোনৰ GPS / Location বন্ধ আছে"))
             .setMessage(
-                if (isHi)
-                    "इंजन चालू करने के लिए फ़ोन की Location (GPS) चालू करना अनिवार्य है। बिना Location ऑन किए इंजन काम नहीं करेगा।"
-                else
-                    "Phone Location (GPS) must be turned ON to activate the engine. Without Location ON, the engine will not work."
+                tr(
+                    "Phone Location (GPS) must be turned ON to activate the engine.",
+                    "इंजन चालू करने के लिए फ़ोन की Location (GPS) चालू करना अनिवार्य है।",
+                    "ইঞ্জিন চালু কৰিবলৈ ফোনৰ Location (GPS) অন কৰাটো বাধ্যতামূলক।"
+                )
             )
             .setCancelable(false)
-            .setPositiveButton(if (isHi) "Location सेटिंग खोलें" else "Open Location Settings") { _, _ ->
+            .setPositiveButton(tr("Open Location Settings", "Location सेटिंग खोलें", "Location ছেটিং খোলক")) { _, _ ->
                 try {
                     ctx.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                 } catch (_: Exception) {
                 }
             }
-            .setNegativeButton(if (isHi) "बंद रखें" else "Cancel", null)
+            .setNegativeButton(tr("Cancel", "बंद रखें", "বন্ধ ৰাখক"), null)
             .show()
     }
 
     private fun showPermissionRequiredGateDialog(ctx: Context, onRetryGranted: () -> Unit) {
-        val isHi = selectedLang == "HI"
         AlertDialog.Builder(ctx)
-            .setTitle(if (isHi) "📍 लोकेशन परमिशन ज़रूरी है" else "📍 Location Permission Required")
+            .setTitle(tr("📍 Location Permission Required", "📍 लोकेशन परमिशन ज़रूरी है", "📍 লোকেচন অনুমতি প্ৰয়োজন"))
             .setMessage(
-                if (isHi)
-                    "लोकेशन परमिशन दिए बिना इंजन चालू नहीं होगा। कृपया परमिशन दें या App Settings में जाकर Location चालू करें।"
-                else
-                    "Engine cannot start without Location permission. Please allow Location permission or open App Settings."
+                tr(
+                    "Engine cannot start without Location permission. Please allow Location permission.",
+                    "लोकेशन परमिशन दिए बिना इंजन चालू नहीं होगा। कृपया परमिशन दें।",
+                    "লোকেচন অনুমতি নিদিয়াকৈ ইঞ্জিন চালু নহয়। অনুগ্ৰহ কৰি অনুমতি দিয়ক।"
+                )
             )
             .setCancelable(false)
-            .setPositiveButton(if (isHi) "परमिशन दें" else "Allow Permission") { _, _ ->
+            .setPositiveButton(tr("Allow Permission", "परमिशन दें", "অনুমতি দিয়ক")) { _, _ ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     pendingEngineActivateCallback = onRetryGranted
                     requestPermissions(
@@ -284,7 +307,7 @@ class MainActivity : Activity() {
                     )
                 }
             }
-            .setNeutralButton(if (isHi) "सेटिंग्स खोलें" else "App Settings") { _, _ ->
+            .setNeutralButton(tr("App Settings", "सेटिंग्स खोलें", "এপ ছেটিংছ")) { _, _ ->
                 try {
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                         data = Uri.parse("package:${ctx.packageName}")
@@ -293,7 +316,7 @@ class MainActivity : Activity() {
                 } catch (_: Exception) {
                 }
             }
-            .setNegativeButton(if (isHi) "बंद रखें" else "Keep Off") { _, _ ->
+            .setNegativeButton(tr("Keep Off", "बंद रखें", "বন্ধ ৰাখক")) { _, _ ->
                 pendingEngineActivateCallback = null
             }
             .show()
@@ -439,6 +462,56 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun shareRiderLiveLocationWithFamily(ctx: Context, riderName: String, riderId: String) {
+        if (!hasRiderLocationPermission(ctx)) {
+            Toast.makeText(
+                ctx,
+                tr("Please allow Location permission first", "कृपया पहले लोकेशन परमिशन दें", "অনুগ্ৰহ কৰি প্ৰথমে লোকেচন অনুমতি দিয়ক"),
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        if (!isDeviceLocationEnabled(ctx)) {
+            showDeviceGpsSettingsDialog(ctx)
+            return
+        }
+        registerLocationUpdates(ctx)
+        val coords = readCurrentLocation(ctx)
+        if (coords == null) {
+            Toast.makeText(
+                ctx,
+                tr(
+                    "Waiting for GPS signal... Keep GPS ON and try again in a few seconds.",
+                    "GPS सिग्नल मिल रहा है... GPS चालू रखें और कुछ सेकंड में फिर दबाएं।",
+                    "GPS সংকেত পোৱা হৈছে... GPS অন ৰাখক আৰু কেইছেকেণ্ডমান পাছত পুনৰ টিপক।"
+                ),
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        val mapsLink = "https://maps.google.com/?q=${coords.first},${coords.second}"
+        val shareBody = tr(
+            "📍 Live Location of $riderName ($riderId)\nStatus: $lastMovementText\nMap: $mapsLink",
+            "📍 $riderName ($riderId) की लाइव लोकेशन\nस्थिति: $lastMovementText\nमैप लिंक: $mapsLink",
+            "📍 $riderName ($riderId) ৰ লাইভ লোকেচন\nঅৱস্থা: $lastMovementText\nমেপ লিংক: $mapsLink"
+        )
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Live Location - $riderName")
+            putExtra(Intent.EXTRA_TEXT, shareBody)
+        }
+        try {
+            ctx.startActivity(
+                Intent.createChooser(
+                    shareIntent,
+                    tr("Share Live Location via", "लाइव लोकेशन शेयर करें", "লাইভ লোকেচন শ্বেয়াৰ কৰক")
+                )
+            )
+        } catch (_: Exception) {
+            Toast.makeText(ctx, mapsLink, Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun deleteRiderFromAdmin(ctx: Context, targetRiderId: String, onDone: () -> Unit) {
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         prefs.edit()
@@ -492,7 +565,7 @@ class MainActivity : Activity() {
         }
         Toast.makeText(
             ctx,
-            if (selectedLang == "HI") "पुराना लॉगिन हटाया गया, नया अकाउंट बनाएं" else "Previous login cleared for fresh account",
+            tr("Previous login cleared for fresh account", "पुराना लॉगिन हटाया गया, नया अकाउंट बनाएं", "পুৰণি লগইন আঁতৰোৱা হ'ল, নতুন একাউণ্ট বনাওক"),
             Toast.LENGTH_LONG
         ).show()
         showRiderRegistrationScreen(ctx, hardwareId, "", "", "", "")
@@ -506,8 +579,35 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun applyTtsLanguage() {
-        tts?.language = if (selectedLang == "HI") Locale("hi", "IN") else Locale.US
+    private fun applyTtsLanguageAndSoftVoice() {
+        val engine = tts ?: return
+        val targetLocale = when (selectedLang) {
+            "HI" -> Locale("hi", "IN")
+            "AS" -> Locale("as", "IN")
+            else -> Locale.US
+        }
+        val res = engine.setLanguage(targetLocale)
+        if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+            engine.language = if (selectedLang == "AS") Locale("hi", "IN") else Locale.US
+        }
+        engine.setPitch(1.08f)
+        engine.setSpeechRate(0.95f)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val voices = engine.voices
+                if (voices != null) {
+                    val softVoice = voices.firstOrNull { v ->
+                        val n = v.name.lowercase(Locale.US)
+                        val langMatch = v.locale.language == targetLocale.language || v.locale.language == "hi" || v.locale.language == "en"
+                        langMatch && (n.contains("female") || n.contains("wavenet-a") || n.contains("wavenet-c") || n.contains("wavenet-e") || n.contains("sfg"))
+                    }
+                    if (softVoice != null) {
+                        engine.voice = softVoice
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
     }
 
     private fun pickPhotoFromGallery(ctx: Context, onBase64Ready: (String) -> Unit) {
@@ -645,29 +745,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun matchesRideRules(
-        ridePickupKm: Float,
-        rideDropKm: Float,
-        rideFareRs: Int,
-        maxPickupKm: Float,
-        maxDropKm: Float,
-        dropLimitEnabled: Boolean,
-        minFareRs: Int,
-        parcelModeOn: Boolean,
-        isParcelOrder: Boolean = true
-    ): Boolean {
-        val parcelOk = if (parcelModeOn) isParcelOrder else true
-        val pickupOk = ridePickupKm <= maxPickupKm
-        val dropOk = if (dropLimitEnabled) (rideDropKm <= maxDropKm) else true
-        val fareOk = rideFareRs >= minFareRs
-        return parcelOk && pickupOk && dropOk && fareOk
-    }
-
     private fun loadAndStart(ctx: Context, hardwareId: String) {
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val nowMillis = System.currentTimeMillis()
 
-        configurableTrialDays = prefs.getLong("trial_days_global", 3L).coerceAtLeast(0L)
+        configurableTrialDays = prefs.getLong("trial_days_global", 30L).coerceAtLeast(0L)
         plan1MonthPrice = prefs.getInt("plan_1m_price", 49)
         plan2MonthPrice = prefs.getInt("plan_2m_price", 70)
         plan3MonthPrice = prefs.getInt("plan_3m_price", 99)
@@ -771,7 +853,6 @@ class MainActivity : Activity() {
     }
 
     private fun showBlockedScreen(ctx: Context, riderId: String, riderName: String) {
-        val isHi = selectedLang == "HI"
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
@@ -786,32 +867,34 @@ class MainActivity : Activity() {
 
         val card = makeCard(ctx, cardDark, accentRed)
         card.addView(TextView(ctx).apply {
-            text = if (isHi) "🚫 आपकी आईडी ब्लॉक है" else "🚫 Account Paused by Admin"
+            text = tr("🚫 Account Paused by Admin", "🚫 आपकी आईडी ब्लॉक है", "🚫 আপোনাৰ আইডি ব্লক হৈছে")
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.parseColor("#F87171"))
         })
         card.addView(TextView(ctx).apply {
-            text = if (isHi)
-                "\n$riderName ($riderId)\nआईडी खुलवाने के लिए नीचे 200 शब्दों में अपनी समस्या लिखकर एडमिन को रिक्वेस्ट भेजें।"
-                else
-                "\n$riderName ($riderId)\nWrite your issue (up to 200 words) below to send an unblock request to Admin."
+            text = tr(
+                "\n$riderName ($riderId)\nWrite your issue (up to 200 words) below to send an unblock request to Admin.",
+                "\n$riderName ($riderId)\nआईडी खुलवाने के लिए नीचे 200 शब्दों में अपनी समस्या लिखकर एडमिन को रिक्वेस्ट भेजें।",
+                "\n$riderName ($riderId)\nআইডি খুলিবলৈ তলত ২০০ শব্দৰ ভিতৰত আপোনাৰ সমস্যা লিখি এডমিনলৈ অনুৰোধ পঠিয়াওক।"
+            )
             textSize = 13f
             setTextColor(textWhite)
         })
 
         val wordCountTv = TextView(ctx).apply {
-            text = if (isHi) "शब्द: 0 / 200" else "Words: 0 / 200"
+            text = tr("Words: 0 / 200", "शब्द: 0 / 200", "শব্দ: 0 / 200")
             textSize = 12f
             setTextColor(accentGold)
             setPadding(0, 12, 0, 6)
         }
 
         val reqEt = EditText(ctx).apply {
-            hint = if (isHi)
-                "यहाँ अपनी समस्या लिखें (अधिकतम 200 शब्द): प्लीज़ मेरा आईडी ओपन कर दीजिए..."
-                else
-                "Write your problem here (max 200 words): Please open my ID..."
+            hint = tr(
+                "Write your problem here (max 200 words)...",
+                "यहाँ अपनी समस्या लिखें (अधिकतम 200 शब्द)...",
+                "ইয়াত আপোনাৰ সমস্যা লিখক (সৰ্বাধিক ২০০ শব্দ)..."
+            )
             setTextColor(textWhite)
             setHintTextColor(textMuted)
             textSize = 13f
@@ -832,7 +915,7 @@ class MainActivity : Activity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 val words = countWords(s?.toString() ?: "")
-                wordCountTv.text = if (isHi) "शब्द: $words / 200" else "Words: $words / 200"
+                wordCountTv.text = tr("Words: $words / 200", "शब्द: $words / 200", "শব্দ: $words / 200")
                 wordCountTv.setTextColor(if (words > 200) Color.parseColor("#F87171") else accentGold)
             }
             override fun afterTextChanged(s: android.text.Editable?) {}
@@ -840,7 +923,7 @@ class MainActivity : Activity() {
 
         val sendReqBtn = makeStyledButton(
             ctx,
-            if (isHi) "📩 आईडी खोलने की रिक्वेस्ट भेजें" else "📩 Send Unblock Request",
+            tr("📩 Send Unblock Request", "📩 आईडी खोलने की रिक्वेस्ट भेजें", "📩 আইডি খোলাৰ অনুৰোধ পঠিয়াওক"),
             accentGreen
         ).apply {
             setOnClickListener {
@@ -848,7 +931,7 @@ class MainActivity : Activity() {
                 if (msg.isEmpty()) {
                     Toast.makeText(
                         ctx,
-                        if (isHi) "कृपया पहले अपनी समस्या लिखें" else "Please write your message first",
+                        tr("Please write your message first", "कृपया पहले अपनी समस्या लिखें", "অনুগ্ৰহ কৰি প্ৰথমে আপোনাৰ সমস্যা লিখক"),
                         Toast.LENGTH_SHORT
                     ).show()
                     return@setOnClickListener
@@ -857,7 +940,7 @@ class MainActivity : Activity() {
                 if (words > 200) {
                     Toast.makeText(
                         ctx,
-                        if (isHi) "कृपया 200 शब्दों के अंदर लिखें (अभी $words शब्द हैं)" else "Please keep within 200 words (currently $words words)",
+                        tr("Please keep within 200 words ($words words)", "कृपया 200 शब्दों के अंदर लिखें ($words शब्द)", "অনুগ্ৰহ কৰি ২০০ শব্দৰ ভিতৰত লিখক ($words শব্দ)"),
                         Toast.LENGTH_LONG
                     ).show()
                     return@setOnClickListener
@@ -897,7 +980,7 @@ class MainActivity : Activity() {
                 reqEt.setText("")
                 Toast.makeText(
                     ctx,
-                    if (isHi) "आपकी रिक्वेस्ट एडमिन को भेज दी गई है" else "Request sent to Admin",
+                    tr("Request sent to Admin", "आपकी रिक्वेस्ट एडमिन को भेज दी गई है", "আপোনাৰ অনুৰোধ এডমিনলৈ পঠিওৱা হৈছে"),
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -950,15 +1033,19 @@ class MainActivity : Activity() {
 
         val card = makeCard(ctx, cardDark, borderSlate)
         card.addView(TextView(ctx).apply {
-            text = if (selectedLang == "HI") "🪪 नया राइडर अकाउंट (नाम, मोबाइल व वाहन)" else "🪪 Fresh Rider Account (Name, Mobile & Vehicle)"
+            text = tr(
+                "🪪 Fresh Rider Account (Name, Mobile & Vehicle)",
+                "🪪 नया राइडर अकाउंट (नाम, मोबाइल व वाहन)",
+                "🪪 নতুন ৰাইডাৰ একাউণ্ট (নাম, মোবাইল আৰু বাহন)"
+            )
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
             setPadding(0, 0, 0, 10)
         })
 
-        val nameEt = makeStyledInput(ctx, existingName, if (selectedLang == "HI") "पूरा नाम" else "Full Name")
-        val mobileEt = makeStyledInput(ctx, existingMobile, if (selectedLang == "HI") "मोबाइल नंबर (Rider ID)" else "Mobile Number (Rider ID)")
+        val nameEt = makeStyledInput(ctx, existingName, tr("Full Name", "पूरा नाम", "সম্পূৰ্ণ নাম"))
+        val mobileEt = makeStyledInput(ctx, existingMobile, tr("Mobile Number (Rider ID)", "मोबाइल नंबर (Rider ID)", "মোবাইল নম্বৰ (Rider ID)"))
         mobileEt.inputType = InputType.TYPE_CLASS_PHONE
 
         card.addView(nameEt)
@@ -966,7 +1053,7 @@ class MainActivity : Activity() {
         card.addView(mobileEt)
 
         card.addView(TextView(ctx).apply {
-            text = if (selectedLang == "HI") "\n🚗 अपना वाहन आइकन चुनें:" else "\n🚗 Tap Your Vehicle Icon:"
+            text = tr("\n🚗 Tap Your Vehicle Icon:", "\n🚗 अपना वाहन आइकन चुनें:", "\n🚗 আপোনাৰ বাহনৰ আইকন বাছনি কৰক:")
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
             setTextColor(accentGold)
@@ -1056,7 +1143,7 @@ class MainActivity : Activity() {
 
         val pickPhotoBtn = makeStyledButton(
             ctx,
-            if (selectedLang == "HI") "📷 प्रोफ़ाइल फ़ोटो चुनें" else "📷 Choose Profile Photo",
+            tr("📷 Choose Profile Photo", "📷 प्रोफ़ाइल फ़ोटो चुनें", "📷 প্ৰফাইল ফটো বাছনি কৰক"),
             cardElevated
         ).apply {
             textSize = 12f
@@ -1071,7 +1158,7 @@ class MainActivity : Activity() {
 
         val saveBtn = makeStyledButton(
             ctx,
-            if (selectedLang == "HI") "▶️ स्टार्ट करें" else "▶️ START",
+            tr("▶️ START", "▶️ स्टार्ट करें", "▶️ আৰম্ভ কৰক"),
             accentGreen
         ).apply {
             setOnClickListener {
@@ -1123,7 +1210,7 @@ class MainActivity : Activity() {
                 } else {
                     Toast.makeText(
                         ctx,
-                        if (selectedLang == "HI") "गलत पासवर्ड" else "Invalid Passport",
+                        tr("Invalid Passport", "गलत पासवर्ड", "ভুল পাছৱৰ্ড"),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -1383,7 +1470,7 @@ class MainActivity : Activity() {
         val mBlock = "🛡️ Block / Unblock Rider"
         val mQrLinks = "📱 QR Code & Social Links"
         val mFresh = "🔄 Reset Login (Fresh Account)"
-        val mLang = "🌐 Language: Hindi / English"
+        val mLang = "🌐 Language: English / हिन्दी / অসমীয়া"
         val mBack = "🏍️ Rider Panel"
 
         adminDotsBtn.setOnClickListener {
@@ -1407,7 +1494,7 @@ class MainActivity : Activity() {
                     mQrLinks -> openAdminQrAndLinksDialog(ctx)
                     mFresh -> confirmFreshAccountReset(ctx, hwId)
                     mLang -> {
-                        toggleAppLanguage(ctx)
+                        cycleAppLanguage(ctx)
                         showAdminDashboardScreen(ctx, defaultRiderId)
                     }
                     mBack -> loadAndStart(ctx, hwId)
@@ -1432,7 +1519,8 @@ class MainActivity : Activity() {
         val lat: Double?,
         val lng: Double?,
         val locTime: Long,
-        val movementStatus: String = "Live"
+        val movementStatus: String = "Live",
+        val remainingDays: Long = 0L
     )
 
     private fun openSingleRiderActionsDialog(ctx: Context, entry: RiderEntry, refreshList: () -> Unit) {
@@ -1448,13 +1536,13 @@ class MainActivity : Activity() {
             "📞 Call Rider (${entry.mobile})",
             "💬 Chat & Photos",
             "📍 Open Live Location on Map",
-            "💳 Subscription Days (+/-)",
+            "💳 Subscription Days (+/-) [Left: ${entry.remainingDays}d]",
             "🛡️ Block / Unblock Rider",
             "🗑️ Delete Rider (Allow Fresh Account)"
         )
 
         AlertDialog.Builder(ctx)
-            .setTitle("${entry.name} (${entry.mobile})\nVehicle: $vLabel • $locText")
+            .setTitle("${entry.name} (${entry.mobile})\nVehicle: $vLabel • Remaining: ${entry.remainingDays} days\n$locText")
             .setItems(options) { _, which ->
                 when (which) {
                     0 -> {
@@ -1667,9 +1755,16 @@ class MainActivity : Activity() {
                             val lng = child.child("lng").getValue(Double::class.java)
                             val locTime = child.child("locationUpdatedAt").getValue(Long::class.java) ?: 0L
                             val moveStatus = child.child("movementStatus").getValue(String::class.java) ?: "Live"
+                            val trialStart = child.child("trialStart").getValue(Long::class.java) ?: 0L
+                            val activeUntil = child.child("activeUntil").getValue(Long::class.java) ?: 0L
+                            val customTrial = child.child("customTrialDays").getValue(Long::class.java)
+                            val remDays = computeRemainingDays(trialStart, activeUntil, customTrial, now)
                             if (onlyOnline && !isOnline) continue
                             allEntries.add(
-                                RiderEntry(rId, name, mobile, vehicleTypeKey, photoB64, isOnline, lat, lng, locTime, moveStatus)
+                                RiderEntry(
+                                    rId, name, mobile, vehicleTypeKey, photoB64,
+                                    isOnline, lat, lng, locTime, moveStatus, remDays
+                                )
                             )
                         }
                         renderEntries(searchEt.text.toString())
@@ -1685,7 +1780,8 @@ class MainActivity : Activity() {
             val q = filterQuery.trim().lowercase(Locale.US)
             var count = 0
             for (entry in allEntries) {
-                val vLabel = VehicleType.safeLabel(entry.vehicleTypeKey)
+                val vType = VehicleType.fromKey(entry.vehicleTypeKey) ?: VehicleType.BIKE
+                val vLabel = vType.label
                 if (q.isNotEmpty() &&
                     !entry.name.lowercase(Locale.US).contains(q) &&
                     !entry.mobile.lowercase(Locale.US).contains(q) &&
@@ -1707,10 +1803,8 @@ class MainActivity : Activity() {
                     layoutParams = LinearLayout.LayoutParams(90, 90).apply { rightMargin = 8 }
                     if (bmp != null) setImageBitmap(bmp)
                 }
-                val vehicleBadge = TextView(ctx).apply {
-                    text = "🏍️"
-                    textSize = 22f
-                    gravity = Gravity.CENTER
+                val vehicleIconView = ImageView(ctx).apply {
+                    setImageResource(vType.iconRes)
                     layoutParams = LinearLayout.LayoutParams(54, 54).apply { rightMargin = 8 }
                 }
                 val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
@@ -1720,11 +1814,11 @@ class MainActivity : Activity() {
                     "\nLive Location: Waiting for GPS"
                 }
                 val detailsTv = TextView(ctx).apply {
-                    text = "${entry.name} (${entry.mobile})\nVehicle: $vLabel • ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
+                    text = "${entry.name} (${entry.mobile})\nVehicle: $vLabel • ${entry.remainingDays} days left • ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
                     textSize = 12f
                 }
                 row.addView(photoView)
-                row.addView(vehicleBadge)
+                row.addView(vehicleIconView)
                 row.addView(detailsTv)
                 listContainer.addView(row)
             }
@@ -1804,7 +1898,7 @@ class MainActivity : Activity() {
             setText(defaultRiderId)
         }
         val trialEt = EditText(ctx).apply {
-            hint = "Free Trial Days (e.g. 3, 7, 1)"
+            hint = "Free Trial Days (e.g. 30, 7, 3)"
             setText(configurableTrialDays.toString())
             inputType = InputType.TYPE_CLASS_NUMBER
         }
@@ -1817,7 +1911,7 @@ class MainActivity : Activity() {
             .setTitle("⏳ Free Trial Manager")
             .setView(box)
             .setPositiveButton("Save") { _, _ ->
-                val tDays = trialEt.text.toString().trim().toLongOrNull() ?: 3L
+                val tDays = trialEt.text.toString().trim().toLongOrNull() ?: 30L
                 val targetId = riderIdEt.text.toString().trim()
                 configurableTrialDays = tDays.coerceAtLeast(0L)
                 prefs.edit().putLong("trial_days_global", configurableTrialDays).apply()
@@ -2081,7 +2175,7 @@ class MainActivity : Activity() {
             setPadding(0, 0, 0, 10)
         }
         val msgEt = EditText(ctx).apply {
-            hint = if (selectedLang == "HI") "संदेश लिखें..." else "Type message..."
+            hint = tr("Type message...", "संदेश लिखें...", "বাৰ্তা লিখক...")
         }
         val photoPreview = ImageView(ctx).apply {
             layoutParams = LinearLayout.LayoutParams(180, 180).apply {
@@ -2091,7 +2185,7 @@ class MainActivity : Activity() {
             }
         }
         val pickPhotoBtn = Button(ctx).apply {
-            text = if (selectedLang == "HI") "📷 फ़ोटो लगाएं" else "📷 Attach Photo"
+            text = tr("📷 Attach Photo", "📷 फ़ोटो लगाएं", "📷 ফটো সংলগ্ন কৰক")
             setOnClickListener {
                 pickPhotoFromGallery(ctx) { b64 ->
                     attachPhotoB64 = b64
@@ -2101,7 +2195,7 @@ class MainActivity : Activity() {
             }
         }
         val sendBtn = Button(ctx).apply {
-            text = if (selectedLang == "HI") "📤 भेजें" else "📤 Send"
+            text = tr("📤 Send", "📤 भेजें", "📤 পঠিয়াওক")
             setOnClickListener {
                 val txt = msgEt.text.toString().trim()
                 if (txt.isEmpty() && attachPhotoB64.isBlank()) return@setOnClickListener
@@ -2142,9 +2236,9 @@ class MainActivity : Activity() {
         scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle(if (selectedLang == "HI") "💬 लाइव चैट" else "💬 Live Chat")
+            .setTitle(tr("💬 Live Chat", "💬 लाइव चैट", "💬 লাইভ চেট"))
             .setView(scroll)
-            .setNegativeButton(if (selectedLang == "HI") "बंद करें" else "Close", null)
+            .setNegativeButton(tr("Close", "बंद करें", "বন্ধ কৰক"), null)
             .show()
     }
 
@@ -2167,44 +2261,44 @@ class MainActivity : Activity() {
             setPadding(32, 24, 32, 20)
         }
         val pEt = EditText(ctx).apply {
-            hint = if (selectedLang == "HI") "अधिकतम पिकअप दूरी (किमी)" else "Max Pickup Distance (Km)"
+            hint = tr("Max Pickup Distance (Km)", "अधिकतम पिकअप दूरी (किमी)", "সৰ্বাধিক পিকআপ দূৰত্ব (কিঃমিঃ)")
             setText(pickupEt.text.toString())
         }
         val dEt = EditText(ctx).apply {
-            hint = if (selectedLang == "HI") "ड्रॉप दूरी (किमी)" else "Drop Distance (Km)"
+            hint = tr("Drop Distance (Km)", "ड्रॉप दूरी (किमी)", "ড্ৰপ দূৰত্ব (কিঃমিঃ)")
             setText(dropEt.text.toString())
         }
         val dSw = Switch(ctx).apply {
-            text = if (selectedLang == "HI") "ड्रॉप सीमा लागू करें (On/Off)" else "Enable Drop Limit (On/Off)"
+            text = tr("Enable Drop Limit (On/Off)", "ड्रॉप सीमा लागू करें (On/Off)", "ড্ৰপ সীমা প্ৰয়োগ কৰক (On/Off)")
             isChecked = swDropLimit.isChecked
         }
         val aEt = EditText(ctx).apply {
-            hint = if (selectedLang == "HI") "न्यूनतम किराया (₹)" else "Min Ride Amount / Fare (₹)"
+            hint = tr("Min Ride Amount / Fare (₹)", "न्यूनतम किराया (₹)", "নূন্যতম ভাড়া (₹)")
             setText(amountEt.text.toString())
         }
         val s1 = Switch(ctx).apply {
-            text = if (selectedLang == "HI") "केवल Ola/Rapido" else "Only Ola/Rapido"
+            text = tr("Only Ola/Rapido", "केवल Ola/Rapido", "কেৱল Ola/Rapido")
             isChecked = swOnlyOlaRapido.isChecked
         }
         val s2 = Switch(ctx).apply {
-            text = if (selectedLang == "HI") "आवाज़ / TTS चलाएं" else "Play Sound / TTS"
+            text = tr("Play Sound / TTS", "आवाज़ / TTS चलाएं", "আৱাজ / TTS চলাওক")
             isChecked = swSoundTts.isChecked
         }
         val s3 = Switch(ctx).apply {
-            text = if (selectedLang == "HI") "ऑटो एक्सेप्ट" else "Auto Accept"
+            text = tr("Auto Accept", "ऑटो एक्सेप्ट", "অটো এক্সেপ্ট")
             isChecked = swAutoAccept.isChecked
         }
         val s4 = Switch(ctx).apply {
-            text = if (selectedLang == "HI") "स्क्रीनशॉट गैलरी में सेव करें" else "Screenshot Save to Gallery"
+            text = tr("Screenshot Save to Gallery", "स्क्रीनशॉट गैलरी में सेव करें", "স্ক্ৰীণশ্বট গেলাৰীত ছেভ কৰক")
             isChecked = swScreenshot.isChecked
         }
 
-        box.addView(TextView(ctx).apply { text = if (selectedLang == "HI") "अधिकतम पिकअप (किमी):" else "Max Pickup (Km):" })
+        box.addView(TextView(ctx).apply { text = tr("Max Pickup (Km):", "अधिकतम पिकअप (किमी):", "সৰ্বাধিক পিকআপ (কিঃমিঃ):") })
         box.addView(pEt)
-        box.addView(TextView(ctx).apply { text = if (selectedLang == "HI") "ड्रॉप (किमी):" else "Drop (Km):" })
+        box.addView(TextView(ctx).apply { text = tr("Drop (Km):", "ड्रॉप (किमी):", "ড্ৰপ (কিঃমিঃ):") })
         box.addView(dEt)
         box.addView(dSw)
-        box.addView(TextView(ctx).apply { text = if (selectedLang == "HI") "न्यूनतम अमाउंट (₹):" else "Min Ride Amount (₹):" })
+        box.addView(TextView(ctx).apply { text = tr("Min Ride Amount (₹):", "न्यूनतम अमाउंट (₹):", "নূন্যতম ভাড়া (₹):") })
         box.addView(aEt)
         box.addView(s1)
         box.addView(s2)
@@ -2217,9 +2311,9 @@ class MainActivity : Activity() {
         scroll.addView(box)
 
         AlertDialog.Builder(ctx)
-            .setTitle(if (selectedLang == "HI") "⚙️ सेटिंग्स" else "⚙️ Settings")
+            .setTitle(tr("⚙️ Settings", "⚙️ सेटिंग्स", "⚙️ ছেটিংছ"))
             .setView(scroll)
-            .setPositiveButton(if (selectedLang == "HI") "सेव करें" else "Save") { _, _ ->
+            .setPositiveButton(tr("Save", "सेव करें", "ছেভ কৰক")) { _, _ ->
                 pickupEt.setText(pEt.text.toString().trim())
                 dropEt.setText(dEt.text.toString().trim())
                 swDropLimit.isChecked = dSw.isChecked
@@ -2230,7 +2324,7 @@ class MainActivity : Activity() {
                 swScreenshot.isChecked = s4.isChecked
                 onSaved()
             }
-            .setNegativeButton(if (selectedLang == "HI") "बंद करें" else "Close", null)
+            .setNegativeButton(tr("Close", "बंद करें", "বন্ধ কৰক"), null)
             .show()
     }
 
@@ -2241,9 +2335,9 @@ class MainActivity : Activity() {
         }
         box.addView(buildCompactSocialLinksCard(ctx))
         AlertDialog.Builder(ctx)
-            .setTitle(if (selectedLang == "HI") "📱 सोशल लिंक्स" else "📱 Social Links")
+            .setTitle(tr("📱 Social Links", "📱 सोशल लिंक्स", "📱 ছ'চিয়েল লিংকসমূহ"))
             .setView(box)
-            .setNegativeButton(if (selectedLang == "HI") "बंद करें" else "Close", null)
+            .setNegativeButton(tr("Close", "बंद करें", "বন্ধ কৰক"), null)
             .show()
     }
 
@@ -2275,7 +2369,7 @@ class MainActivity : Activity() {
 
         val planCard = makeCard(ctx, cardDark, borderSlate)
         planCard.addView(TextView(ctx).apply {
-            text = if (selectedLang == "HI") "🏷️ सब्सक्रिप्शन प्लान चुनें" else "🏷️ Select Subscription Plan"
+            text = tr("🏷️ Select Subscription Plan", "🏷️ सब्सक्रिप्शन प्लान चुनें", "🏷️ ছাবস্ক্ৰিপচন প্লেন বাছনি কৰক")
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -2343,7 +2437,7 @@ class MainActivity : Activity() {
 
         col.addView(makeStyledButton(
             ctx,
-            if (selectedLang == "HI") "✅ मैंने पेमेंट कर दिया • एडमिन को बताएं" else "✅ I Have Paid • Notify Admin",
+            tr("✅ I Have Paid • Notify Admin", "✅ मैंने पेमेंट कर दिया • एडमिन को बताएं", "✅ মই পেমেণ্ট কৰিলোঁ • এডমিনক জনাওক"),
             accentGreen
         ).apply {
             setOnClickListener {
@@ -2369,7 +2463,7 @@ class MainActivity : Activity() {
         col.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 12) })
         col.addView(makeStyledButton(
             ctx,
-            if (selectedLang == "HI") "💬 लाइव चैट" else "💬 Live Chat",
+            tr("💬 Live Chat", "💬 लाइव चैट", "💬 লাইভ চেট"),
             accentPurple
         ).apply {
             setOnClickListener { openRiderLiveChatDialog(ctx, riderId, riderName) }
@@ -2382,17 +2476,12 @@ class MainActivity : Activity() {
     }
 
     private fun showRiderDashboard(ctx: Context, riderId: String, riderName: String) {
-        val isHi = selectedLang == "HI"
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val pickupDef = prefs.getString("pickup_km", "1.0") ?: "1.0"
         val dropDef = prefs.getString("drop_km", "4.0") ?: "4.0"
         val dropLimitDef = prefs.getBoolean("drop_limit_on", false)
         val fareDef = prefs.getString("fare_rs", "20") ?: "20"
         val vehicleLabel = VehicleType.safeLabel(prefs.getString("rider_vehicle_type", "bike"))
-
-        var totalEarnings = prefs.getInt("total_earnings", 0)
-        var totalRides = prefs.getInt("total_rides", 0)
-        var totalDistance = prefs.getFloat("total_distance", 0f)
 
         var isEngineActivated = false
         var isAutoAcceptEnabled = false
@@ -2466,7 +2555,7 @@ class MainActivity : Activity() {
         if (broadcastMessage.isNotBlank()) {
             val noticeCard = makeCard(ctx, cardElevated, accentGold)
             noticeCard.addView(TextView(ctx).apply {
-                text = (if (isHi) "📢 सूचना: " else "📢 Notice: ") + broadcastMessage
+                text = tr("📢 Notice: ", "📢 सूचना: ", "📢 জাননী: ") + broadcastMessage
                 textSize = 12f
                 setTextColor(accentGold)
             })
@@ -2495,31 +2584,25 @@ class MainActivity : Activity() {
             setPadding(0, 4, 0, 4)
         })
         val fleetStateTv = TextView(ctx).apply {
-            text = if (isHi) "⏸️ स्टैंडबाय (⋮ से इंजन एक्टिव करें)" else "⏸️ Standby (Open ⋮ to Activate Engine)"
+            text = tr(
+                "⏸️ Standby (Open ⋮ to Activate Engine)",
+                "⏸️ स्टैंडबाय (⋮ से इंजन एक्टिव करें)",
+                "⏸️ ষ্টেণ্ডবাই (⋮ ৰ পৰা ইঞ্জিন এক্টিভ কৰক)"
+            )
             textSize = 12f
             setTextColor(Color.parseColor("#F87171"))
         }
         fleetLeft.addView(fleetStateTv)
 
-        val swDropLimit = makeSwitchRow(ctx, if (isHi) "🏁 ड्रॉप सीमा लागू करें (On/Off)" else "🏁 Drop Limit (On/Off)", dropLimitDef)
-        val swOnlyOlaRapido = makeSwitchRow(ctx, if (isHi) "⚡ केवल Ola/Rapido" else "⚡ Only Ola/Rapido", true)
-        val swSoundTts = makeSwitchRow(ctx, if (isHi) "🔊 आवाज़ / TTS चलाएं" else "🔊 Play Sound / TTS", true)
-        val swAutoAccept = makeSwitchRow(ctx, if (isHi) "🤖 ऑटो एक्सेप्ट" else "🤖 Auto Accept", true)
-        val swScreenshot = makeSwitchRow(ctx, if (isHi) "📸 स्क्रीनशॉट गैलरी में सेव करें" else "📸 Screenshot Save to Gallery", true)
+        val swDropLimit = makeSwitchRow(ctx, tr("🏁 Drop Limit (On/Off)", "🏁 ड्रॉप सीमा लागू करें (On/Off)", "🏁 ড্ৰপ সীমা প্ৰয়োগ কৰক (On/Off)"), dropLimitDef)
+        val swOnlyOlaRapido = makeSwitchRow(ctx, tr("⚡ Only Ola/Rapido", "⚡ केवल Ola/Rapido", "⚡ কেৱল Ola/Rapido"), true)
+        val swSoundTts = makeSwitchRow(ctx, tr("🔊 Play Sound / TTS", "🔊 आवाज़ / TTS चलाएं", "🔊 আৱাজ / TTS চলাওক"), true)
+        val swAutoAccept = makeSwitchRow(ctx, tr("🤖 Auto Accept", "🤖 ऑटो एक्सेप्ट", "🤖 অটো এক্সেপ্ট"), true)
+        val swScreenshot = makeSwitchRow(ctx, tr("📸 Screenshot Save to Gallery", "📸 स्क्रीनशॉट गैलरी में सेव करें", "📸 স্ক্ৰীণশ্বট গেলাৰীত ছেভ কৰক"), true)
 
         val pickupEt = makeStyledInput(ctx, pickupDef, "Pickup Km (<= set)")
         val dropEt = makeStyledInput(ctx, dropDef, "Drop Km")
         val amountEt = makeStyledInput(ctx, fareDef, "Min Amount ₹ (>= set)")
-
-        val statsSummaryTv = TextView(ctx).apply {
-            text = if (isHi)
-                "📊 राइड्स: $totalRides | कमाई: ₹$totalEarnings | दूरी: ${String.format(Locale.US, "%.1f", totalDistance)} किमी"
-            else
-                "📊 Rides: $totalRides | Earnings: ₹$totalEarnings | Distance: ${String.format(Locale.US, "%.1f", totalDistance)} Km"
-            textSize = 12f
-            setTextColor(accentGreenBright)
-            setPadding(0, 6, 0, 0)
-        }
 
         val savePrefsAction: () -> Unit = {
             prefs.edit()
@@ -2532,9 +2615,9 @@ class MainActivity : Activity() {
             speakText(
                 ctx,
                 swSoundTts.isChecked,
-                if (isHi) "सेटिंग्स सेव हो गई" else "Rider preferences saved"
+                tr("Rider preferences saved", "सेटिंग्स सेव हो गई हैं", "ৰাইডাৰ ছেটিংছ ছেভ কৰা হৈছে")
             )
-            Toast.makeText(ctx, if (isHi) "सेटिंग्स सेव हुईं" else "Preferences Saved", Toast.LENGTH_SHORT).show()
+            Toast.makeText(ctx, tr("Preferences Saved", "सेटिंग्स सेव हुईं", "ছেটিংছ ছেভ হ'ল"), Toast.LENGTH_SHORT).show()
         }
 
         val activateEngineNow: () -> Unit = {
@@ -2544,39 +2627,39 @@ class MainActivity : Activity() {
             val hw = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
             startLocationLoop(riderId, riderName, vKey, pB64, hw)
             pushRiderLiveLocation(ctx, riderId, riderName, vKey, pB64, hw)
-            fleetStateTv.text = if (isHi) "✅ इंजन एक्टिव • लोकेशन लाइव" else "✅ Engine Activated • Location Live"
+            fleetStateTv.text = tr("✅ Engine Activated • Location Live", "✅ इंजन एक्टिव • लोकेशन लाइव", "✅ ইঞ্জিন এক্টিভ • লোকেচন লাইভ")
             fleetStateTv.setTextColor(accentGold)
-            speakText(ctx, swSoundTts.isChecked, if (isHi) "इंजन चालू" else "Engine Activated")
-            Toast.makeText(ctx, if (isHi) "इंजन चालू" else "Engine Activated", Toast.LENGTH_SHORT).show()
+            speakText(ctx, swSoundTts.isChecked, tr("Engine activated, live location is on", "इंजन चालू हो गया है, लाइव लोकेशन ऑन है", "ইঞ্জিন চালু হৈছে, লাইভ লোকেচন অন আছে"))
+            Toast.makeText(ctx, tr("Engine Activated", "इंजन चालू", "ইঞ্জিন চালু হ'ল"), Toast.LENGTH_SHORT).show()
         }
 
         val autoAcceptBtn = makeStyledButton(
             ctx,
-            if (isHi) "⚡ ऑटो एक्सेप्ट\nबंद" else "⚡ AUTO ACCEPT\nOFF",
+            tr("⚡ AUTO ACCEPT\nOFF", "⚡ ऑटो एक्सेप्ट\nबंद", "⚡ অটো এক্সেপ্ট\nবন্ধ"),
             Color.parseColor("#2A3954")
         ).apply {
             setOnClickListener {
                 if (!isEngineActivated) {
                     Toast.makeText(
                         ctx,
-                        if (isHi) "पहले ऊपर ⋮ से इंजन एक्टिव करें" else "Open ⋮ on top to Activate Engine first",
+                        tr("Open ⋮ on top to Activate Engine first", "पहले ऊपर ⋮ से इंजन एक्टिव करें", "প্ৰথমে ওপৰৰ ⋮ ৰ পৰা ইঞ্জিন এক্টিভ কৰক"),
                         Toast.LENGTH_SHORT
                     ).show()
                     return@setOnClickListener
                 }
                 isAutoAcceptEnabled = !isAutoAcceptEnabled
                 if (isAutoAcceptEnabled) {
-                    text = if (isHi) "⚡ ऑटो एक्सेप्ट\nचालू" else "⚡ AUTO ACCEPT\nON"
+                    text = tr("⚡ AUTO ACCEPT\nON", "⚡ ऑटो एक्सेप्ट\nचालू", "⚡ অটো এক্সেপ্ট\nচালু")
                     background = make3dPill(accentGreen, accentGreenBright, 14f)
-                    fleetStateTv.text = if (isHi) "✅ सक्रिय • ऑटो एक्सेप्ट चालू" else "✅ Active • Auto Accept ON"
+                    fleetStateTv.text = tr("✅ Active • Auto Accept ON", "✅ सक्रिय • ऑटो एक्सेप्ट चालू", "✅ সক্ৰিয় • অটো এক্সেপ্ট চালু")
                     fleetStateTv.setTextColor(accentGreenBright)
-                    speakText(ctx, swSoundTts.isChecked, if (isHi) "ऑटो एक्सेप्ट चालू" else "Auto Accept On")
+                    speakText(ctx, swSoundTts.isChecked, tr("Order auto accept is on", "ऑर्डर ऑटो एक्सेप्ट चालू है", "অৰ্ডাৰ অটো এক্সেপ্ট চালু হৈছে"))
                 } else {
-                    text = if (isHi) "⚡ ऑटो एक्सेप्ट\nबंद" else "⚡ AUTO ACCEPT\nOFF"
+                    text = tr("⚡ AUTO ACCEPT\nOFF", "⚡ ऑटो एक्सेप्ट\nबंद", "⚡ অটো এক্সেপ্ট\nবন্ধ")
                     background = make3dPill(Color.parseColor("#2A3954"), borderSlate, 14f)
-                    fleetStateTv.text = if (isHi) "⏸️ एक्टिव • ऑटो एक्सेप्ट बंद" else "⏸️ Activated • Auto Accept OFF"
+                    fleetStateTv.text = tr("⏸️ Activated • Auto Accept OFF", "⏸️ एक्टिव • ऑटो एक्सेप्ट बंद", "⏸️ এক্টিভ • অটো এক্সেপ্ট বন্ধ")
                     fleetStateTv.setTextColor(accentGold)
-                    speakText(ctx, swSoundTts.isChecked, if (isHi) "ऑटो एक्सेप्ट बंद" else "Auto Accept Off")
+                    speakText(ctx, swSoundTts.isChecked, tr("Auto accept is off", "ऑटो एक्सेप्ट बंद है", "অটো এক্সেপ্ট বন্ধ কৰা হৈছে"))
                 }
             }
         }
@@ -2584,15 +2667,15 @@ class MainActivity : Activity() {
         riderDotsBtn.setOnClickListener {
             val popup = PopupMenu(ctx, riderDotsBtn)
             val actLabel = if (isEngineActivated) {
-                if (isHi) "⏹️ इंजन बंद करें" else "⏹️ Deactivate Engine"
+                tr("⏹️ Deactivate Engine", "⏹️ इंजन बंद करें", "⏹️ ইঞ্জিন বন্ধ কৰক")
             } else {
-                if (isHi) "▶️ इंजन चालू करें" else "▶️ Activate Engine"
+                tr("▶️ Activate Engine", "▶️ इंजन चालू करें", "▶️ ইঞ্জিন চালু কৰক")
             }
-            val accLabel = if (isHi) "♿ एक्सेसिबिलिटी सेटिंग" else "♿ Accessibility Settings"
-            val setLabel = if (isHi) "⚙️ सेटिंग्स" else "⚙️ Settings"
-            val langLabel = if (isHi) "🌐 भाषा: हिन्दी / English" else "🌐 Language: Hindi / English"
-            val chatLabel = if (isHi) "💬 लाइव चैट" else "💬 Live Chat"
-            val linksLabel = if (isHi) "📱 सोशल लिंक्स" else "📱 Social Links"
+            val accLabel = tr("♿ Accessibility Settings", "♿ एक्सेसिबिलिटी सेटिंग", "♿ এক্সেচিবিলিটি ছেটিংছ")
+            val setLabel = tr("⚙️ Settings", "⚙️ सेटिंग्स", "⚙️ ছেটিংছ")
+            val langLabel = tr("🌐 Language: English / हिन्दी / অসমীয়া", "🌐 भाषा: English / हिन्दी / অসমীয়া", "🌐 ভাষা: English / हिन्दी / অসমীয়া")
+            val chatLabel = tr("💬 Live Chat", "💬 लाइव चैट", "💬 লাইভ চেট")
+            val linksLabel = tr("📱 Social Links", "📱 सोशल लिंक्स", "📱 ছ'চিয়েল লিংকসমূহ")
 
             popup.menu.add(actLabel)
             popup.menu.add(accLabel)
@@ -2612,12 +2695,12 @@ class MainActivity : Activity() {
                             isEngineActivated = false
                             isAutoAcceptEnabled = false
                             stopLocationLoop()
-                            autoAcceptBtn.text = if (isHi) "⚡ ऑटो एक्सेप्ट\nबंद" else "⚡ AUTO ACCEPT\nOFF"
+                            autoAcceptBtn.text = tr("⚡ AUTO ACCEPT\nOFF", "⚡ ऑटो एक्सेप्ट\nबंद", "⚡ অটো এক্সেপ্ট\nবন্ধ")
                             autoAcceptBtn.background = make3dPill(Color.parseColor("#2A3954"), borderSlate, 14f)
-                            fleetStateTv.text = if (isHi) "⏸️ स्टैंडबाय" else "⏸️ Standby (Deactivated)"
+                            fleetStateTv.text = tr("⏸️ Standby (Deactivated)", "⏸️ स्टैंडबाय", "⏸️ ষ্টেণ্ডবাই")
                             fleetStateTv.setTextColor(Color.parseColor("#F87171"))
-                            speakText(ctx, swSoundTts.isChecked, if (isHi) "इंजन बंद" else "Deactivated")
-                            Toast.makeText(ctx, if (isHi) "इंजन बंद" else "Engine Deactivated", Toast.LENGTH_SHORT).show()
+                            speakText(ctx, swSoundTts.isChecked, tr("Engine deactivated", "इंजन बंद हो गया है", "ইঞ্জিন বন্ধ হৈছে"))
+                            Toast.makeText(ctx, tr("Engine Deactivated", "इंजन बंद", "ইঞ্জিন বন্ধ হ'ল"), Toast.LENGTH_SHORT).show()
                         }
                     }
                     accLabel -> openAccessibilityScreen(ctx)
@@ -2626,7 +2709,7 @@ class MainActivity : Activity() {
                         swDropLimit, swOnlyOlaRapido, swSoundTts, swAutoAccept, swScreenshot, savePrefsAction
                     )
                     langLabel -> {
-                        toggleAppLanguage(ctx)
+                        cycleAppLanguage(ctx)
                         showRiderDashboard(ctx, riderId, riderName)
                     }
                     chatLabel -> openRiderLiveChatDialog(ctx, riderId, riderName)
@@ -2640,15 +2723,28 @@ class MainActivity : Activity() {
         fleetRow.addView(fleetLeft)
         fleetRow.addView(autoAcceptBtn)
         fleetCard.addView(fleetRow)
-        fleetCard.addView(statsSummaryTv)
         homeLayout.addView(fleetCard)
+
+        val shareLocationBtn = makeStyledButton(
+            ctx,
+            tr("📍 SHARE LIVE LOCATION", "📍 लाइव लोकेशन शेयर करें", "📍 লাইভ লোকেচন শ্বেয়াৰ কৰক"),
+            accentTeal
+        ).apply {
+            textSize = 11f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                rightMargin = 6
+            }
+            setOnClickListener {
+                shareRiderLiveLocationWithFamily(ctx, riderName, riderId)
+            }
+        }
 
         val parcelToggleBtn = makeStyledButton(
             ctx,
             if (isParcelModeOn) {
-                if (isHi) "📦 पार्सल: ON (केवल पार्सल एक्सेप्ट)" else "📦 PARCEL: ON (Parcel Only)"
+                tr("📦 PARCEL: ON (Parcel Only)", "📦 पार्सल: ON (केवल पार्सल)", "📦 পাৰ্চেল: ON (কেৱল পাৰ্চেল)")
             } else {
-                if (isHi) "📦 पार्सल: OFF" else "📦 PARCEL: OFF"
+                tr("📦 PARCEL: OFF", "📦 पार्सल: OFF", "📦 পাৰ্চেল: OFF")
             },
             if (isParcelModeOn) accentGreen else accentPurple
         ).apply {
@@ -2660,15 +2756,15 @@ class MainActivity : Activity() {
                 isParcelModeOn = !isParcelModeOn
                 prefs.edit().putBoolean("parcel_mode_on", isParcelModeOn).apply()
                 if (isParcelModeOn) {
-                    text = if (isHi) "📦 पार्सल: ON (केवल पार्सल एक्सेप्ट)" else "📦 PARCEL: ON (Parcel Only)"
+                    text = tr("📦 PARCEL: ON (Parcel Only)", "📦 पार्सल: ON (केवल पार्सल)", "📦 পাৰ্চেল: ON (কেৱল পাৰ্চেল)")
                     background = make3dPill(accentGreen, accentGreenBright, 16f)
-                    speakText(ctx, swSoundTts.isChecked, if (isHi) "पार्सल मोड चालू, केवल पार्सल एक्सेप्ट होगा" else "Parcel mode ON, only parcel orders accepted")
-                    Toast.makeText(ctx, if (isHi) "पार्सल ON • केवल पार्सल एक्सेप्ट होगा" else "Parcel ON • Only Parcel Accepted", Toast.LENGTH_SHORT).show()
+                    speakText(ctx, swSoundTts.isChecked, tr("Parcel mode is on", "पार्सल मोड चालू है", "পাৰ্চেল মোড চালু হৈছে"))
+                    Toast.makeText(ctx, tr("Parcel ON • Only Parcel Accepted", "पार्सल ON • केवल पार्सल एक्सेप्ट होगा", "পাৰ্চেল ON • কেৱল পাৰ্চেল গ্ৰহণ হ'ব"), Toast.LENGTH_SHORT).show()
                 } else {
-                    text = if (isHi) "📦 पार्सल: OFF" else "📦 PARCEL: OFF"
+                    text = tr("📦 PARCEL: OFF", "📦 पार्सल: OFF", "📦 পাৰ্চেল: OFF")
                     background = make3dPill(accentPurple, Color.parseColor("#93C5FD"), 16f)
-                    speakText(ctx, swSoundTts.isChecked, if (isHi) "पार्सल मोड बंद" else "Parcel mode OFF")
-                    Toast.makeText(ctx, if (isHi) "पार्सल OFF" else "Parcel OFF", Toast.LENGTH_SHORT).show()
+                    speakText(ctx, swSoundTts.isChecked, tr("Parcel mode is off", "पार्सल मोड बंद है", "পাৰ্চেল মোড বন্ধ কৰা হৈছে"))
+                    Toast.makeText(ctx, tr("Parcel OFF", "पार्सल OFF", "পাৰ্চেল OFF"), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -2680,63 +2776,17 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = 12 }
         }
-        row1.addView(makeStyledButton(
-            ctx,
-            if (isHi) "🎯 टेस्ट राइड एक्सेप्ट और सेव" else "🎯 TEST RIDE ACCEPT & SAVE",
-            accentBlue
-        ).apply {
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                rightMargin = 6
-            }
-            setOnClickListener {
-                val maxP = pickupEt.text.toString().trim().toFloatOrNull() ?: 1.0f
-                val dKm = dropEt.text.toString().trim().toFloatOrNull() ?: 4.0f
-                val minRs = amountEt.text.toString().trim().toIntOrNull() ?: 20
-
-                if (!matchesRideRules(maxP, dKm, minRs, maxP, dKm, swDropLimit.isChecked, minRs, isParcelModeOn, true)) {
-                    Toast.makeText(
-                        ctx,
-                        if (isParcelModeOn) "केवल पार्सल ऑर्डर स्वीकार होंगे" else "Ride did not match rules",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return@setOnClickListener
-                }
-
-                totalRides += 1
-                totalEarnings += minRs
-                totalDistance += (maxP + dKm)
-                prefs.edit()
-                    .putInt("total_rides", totalRides)
-                    .putInt("total_earnings", totalEarnings)
-                    .putFloat("total_distance", totalDistance)
-                    .apply()
-                statsSummaryTv.text = if (isHi)
-                    "📊 राइड्स: $totalRides | कमाई: ₹$totalEarnings | दूरी: ${String.format(Locale.US, "%.1f", totalDistance)} किमी"
-                else
-                    "📊 Rides: $totalRides | Earnings: ₹$totalEarnings | Distance: ${String.format(Locale.US, "%.1f", totalDistance)} Km"
-                val saved = if (swScreenshot.isChecked) saveScreenshotToGallery(ctx, root) else false
-                speakText(
-                    ctx,
-                    swSoundTts.isChecked,
-                    if (isHi)
-                        "$minRs रुपये की राइड एक्सेप्ट हुई, पिकअप $maxP किलोमीटर, ड्रॉप $dKm किलोमीटर"
-                    else
-                        "Ride accepted for $minRs rupees, pickup $maxP kilometer, drop $dKm kilometer"
-                )
-                Toast.makeText(
-                    ctx,
-                    if (saved) "Ride Accepted & Screenshot Saved" else "Ride Accepted",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-        })
+        row1.addView(shareLocationBtn)
         row1.addView(parcelToggleBtn)
         homeLayout.addView(row1)
 
         val rulesCard = makeCard(ctx, cardDark, borderSlate)
         rulesCard.addView(TextView(ctx).apply {
-            text = if (isHi) "🎯 राइडर नियम (पिकअप <= सेट • न्यूनतम ₹)" else "🎯 Rider Ride Rules (Pickup <= Set • Min ₹)"
+            text = tr(
+                "🎯 Rider Ride Rules (Pickup <= Set • Min ₹)",
+                "🎯 राइडर नियम (पिकअप <= सेट • न्यूनतम ₹)",
+                "🎯 ৰাইডাৰ নিয়ম (পিকআপ <= ছেট • নূন্যতম ₹)"
+            )
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -2744,7 +2794,7 @@ class MainActivity : Activity() {
         })
 
         rulesCard.addView(TextView(ctx).apply {
-            text = if (isHi) "📍 पिकअप दूरी (किमी) — सेट सीमा के अंदर" else "📍 Pickup Distance (Km) — Within set limit only"
+            text = tr("📍 Pickup Distance (Km) — Within set limit only", "📍 पिकअप दूरी (किमी) — सेट सीमा के अंदर", "📍 পিকআপ দূৰত্ব (কিঃমিঃ) — নিৰ্ধাৰিত সীমাৰ ভিতৰত")
             textSize = 12f
             setTextColor(textMuted)
         })
@@ -2752,7 +2802,7 @@ class MainActivity : Activity() {
         rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
 
         rulesCard.addView(TextView(ctx).apply {
-            text = if (isHi) "🏁 ड्रॉप दूरी (किमी) — On होने पर अंदर, Off होने पर खुली" else "🏁 Drop Distance (Km) — Capped when On, open when Off"
+            text = tr("🏁 Drop Distance (Km) — Capped when On, open when Off", "🏁 ड्रॉप दूरी (किमी) — On होने पर अंदर, Off होने पर खुली", "🏁 ড্ৰপ দূৰত্ব (কিঃমিঃ) — On হ'লে সীমিত, Off হ'লে খোলা")
             textSize = 12f
             setTextColor(textMuted)
         })
@@ -2761,7 +2811,7 @@ class MainActivity : Activity() {
         rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
 
         rulesCard.addView(TextView(ctx).apply {
-            text = if (isHi) "💰 राइड अमाउंट / किराया (₹) — सेट से ज़्यादा या बराबर" else "💰 Ride Amount / Fare (₹) — Equal or higher only"
+            text = tr("💰 Ride Amount / Fare (₹) — Equal or higher only", "💰 राइड अमाउंट / किराया (₹) — सेट से ज़्यादा या बराबर", "💰 ৰাইড ভাড়া (₹) — নিৰ্ধাৰিত ৰকম বা তাতকৈ বেছি")
             textSize = 12f
             setTextColor(textMuted)
         })
@@ -2774,7 +2824,7 @@ class MainActivity : Activity() {
 
         rulesCard.addView(makeStyledButton(
             ctx,
-            if (isHi) "💾 राइडर सेटिंग्स सेव करें" else "💾 SAVE RIDER PREFERENCES",
+            tr("💾 SAVE RIDER PREFERENCES", "💾 राइडर सेटिंग्स सेव करें", "💾 ৰাইডাৰ ছেটিংছ ছেভ কৰক"),
             accentGreen
         ).apply {
             setOnClickListener { savePrefsAction() }
@@ -2790,22 +2840,38 @@ class MainActivity : Activity() {
         setContentView(root)
     }
 
-    private fun toggleAppLanguage(ctx: Context) {
-        selectedLang = if (selectedLang == "EN") "HI" else "EN"
-        applyTtsLanguage()
+    private fun cycleAppLanguage(ctx: Context) {
+        selectedLang = when (selectedLang) {
+            "EN" -> "HI"
+            "HI" -> "AS"
+            else -> "EN"
+        }
+        applyTtsLanguageAndSoftVoice()
         ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
             .edit()
             .putString("app_lang", selectedLang)
             .apply()
-        val label = if (selectedLang == "HI") "भाषा: हिन्दी (Hindi)" else "Language: English"
+        val label = when (selectedLang) {
+            "HI" -> "भाषा: हिन्दी (Hindi)"
+            "AS" -> "ভাষা: অসমীয়া (Assamese)"
+            else -> "Language: English"
+        }
         Toast.makeText(ctx, label, Toast.LENGTH_SHORT).show()
-        speakText(ctx, true, if (selectedLang == "HI") "हिन्दी भाषा चुनी गई" else "English language selected")
+        speakText(
+            ctx,
+            true,
+            when (selectedLang) {
+                "HI" -> "हिन्दी भाषा चुनी गई है"
+                "AS" -> "অসমীয়া ভাষা বাছনি কৰা হৈছে"
+                else -> "English language selected"
+            }
+        )
     }
 
     private fun buildCompactSocialLinksCard(ctx: Context): LinearLayout {
         val linksCard = makeCard(ctx, cardDark, borderSlate)
         linksCard.addView(TextView(ctx).apply {
-            text = if (selectedLang == "HI") "📱 सोशल लिंक्स" else "📱 Social Links"
+            text = tr("📱 Social Links", "📱 सोशल लिंक्स", "📱 ছ'চিয়েল লিংকসমূহ")
             textSize = 13f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -2944,20 +3010,6 @@ class MainActivity : Activity() {
             tts?.speak(message, TextToSpeech.QUEUE_FLUSH, null, "csp_tts")
         } else {
             Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun saveScreenshotToGallery(ctx: Context, targetView: View): Boolean {
-        return try {
-            val w = targetView.width
-            val h = targetView.height
-            if (w <= 0 || h <= 0) return false
-            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bmp)
-            targetView.draw(canvas)
-            saveBitmapToGallery(ctx, bmp, "CaptainSmartPro")
-        } catch (_: Exception) {
-            false
         }
     }
 
