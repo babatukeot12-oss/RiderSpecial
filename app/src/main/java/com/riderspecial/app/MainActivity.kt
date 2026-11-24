@@ -3733,7 +3733,6 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             }
         }
 
-        // Same line: Title + Editable value (Km/₹) + ON/OFF badge + ON/OFF switch
         rulesCard.addView(buildInlineEditableRuleRow(
             tr("📍 Pickup (Km)", "📍 पिकअप (किमी)", "📍 পিকআপ (কিঃমিঃ)"),
             pickupEt,
