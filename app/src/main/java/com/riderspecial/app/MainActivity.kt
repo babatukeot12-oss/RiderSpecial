@@ -327,6 +327,10 @@ class MainActivity : Activity() {
             color = glowColor
             style = Paint.Style.FILL
         }
+        val darkFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#091122")
+            style = Paint.Style.FILL
+        }
         val strokeFg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = glowColor
             style = Paint.Style.STROKE
@@ -337,8 +341,8 @@ class MainActivity : Activity() {
         when (feature) {
             GlowingFeatureIcon.AI_HELP -> {
                 canvas.drawCircle(s * 0.50f, s * 0.44f, s * 0.17f, fgPaint)
-                canvas.drawCircle(s * 0.44f, s * 0.42f, s * 0.035f, Color.BLACK)
-                canvas.drawCircle(s * 0.56f, s * 0.42f, s * 0.035f, Color.BLACK)
+                canvas.drawCircle(s * 0.44f, s * 0.42f, s * 0.035f, darkFill)
+                canvas.drawCircle(s * 0.56f, s * 0.42f, s * 0.035f, darkFill)
                 canvas.drawLine(s * 0.50f, s * 0.20f, s * 0.50f, s * 0.27f, strokeFg)
                 canvas.drawCircle(s * 0.50f, s * 0.18f, s * 0.045f, brightPaint)
                 canvas.drawRoundRect(RectF(s * 0.30f, s * 0.64f, s * 0.70f, s * 0.76f), 8f, 8f, fgPaint)
@@ -388,7 +392,7 @@ class MainActivity : Activity() {
             GlowingFeatureIcon.SCREENSHOT -> {
                 canvas.drawRoundRect(RectF(s * 0.22f, s * 0.32f, s * 0.78f, s * 0.72f), 10f, 10f, fgPaint)
                 canvas.drawRoundRect(RectF(s * 0.36f, s * 0.22f, s * 0.64f, s * 0.34f), 6f, 6f, brightPaint)
-                canvas.drawCircle(s * 0.50f, s * 0.52f, s * 0.13f, Color.parseColor("#091122"))
+                canvas.drawCircle(s * 0.50f, s * 0.52f, s * 0.13f, darkFill)
                 canvas.drawCircle(s * 0.50f, s * 0.52f, s * 0.06f, brightPaint)
             }
         }
