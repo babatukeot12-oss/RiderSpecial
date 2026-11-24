@@ -84,6 +84,14 @@ class MainActivity : Activity() {
         }
     }
 
+    private enum class GlowingFeatureIcon(val accentHex: String, val glowHex: String) {
+        AI_HELP("#38BDF8", "#7DD3FC"),
+        OLA_RAPIDO("#FACC15", "#FEF08A"),
+        SOUND_TTS("#22C55E", "#86EFAC"),
+        AUTO_ACCEPT("#C084FC", "#E9D5FF"),
+        SCREENSHOT("#F43F5E", "#FDA4AF")
+    }
+
     private val adminPassport = "dinakeot1990"
     private var configurableTrialDays = 30L
 
@@ -101,11 +109,15 @@ class MainActivity : Activity() {
 
     private var fbUrl = ""
     private var waUrl = ""
-    private var twUrl = ""
+    private var tgUrl = "https://t.me/captain_smart_pro"
     private var ytUrl = ""
     private var broadcastMessage = ""
     private var customQrTitle = "Rider Payment QR"
     private var customQrBase64 = ""
+
+    private var updateEnabledFlag = false
+    private var updateReleasedAtMillis = 0L
+    private var updateDelayHours = 24L
 
     private var pendingPhotoCallback: ((String) -> Unit)? = null
     private var pendingEngineActivateCallback: (() -> Unit)? = null
@@ -238,6 +250,149 @@ class MainActivity : Activity() {
             "AS" -> asText
             else -> en
         }
+    }
+
+    private fun isNewUpdateReadyNow(nowMillis: Long = System.currentTimeMillis()): Boolean {
+        if (!updateEnabledFlag) return false
+        if (updateReleasedAtMillis <= 0L) return false
+        val requiredWaitMs = TimeUnit.HOURS.toMillis(updateDelayHours.coerceAtLeast(0L))
+        return (nowMillis - updateReleasedAtMillis) >= requiredWaitMs
+    }
+
+    private fun getUpdateRemainingHoursText(nowMillis: Long = System.currentTimeMillis()): String {
+        if (!updateEnabledFlag || updateReleasedAtMillis <= 0L) {
+            return "App Not Updated"
+        }
+        val requiredWaitMs = TimeUnit.HOURS.toMillis(updateDelayHours.coerceAtLeast(0L))
+        val elapsed = (nowMillis - updateReleasedAtMillis).coerceAtLeast(0L)
+        val remMs = (requiredWaitMs - elapsed).coerceAtLeast(0L)
+        val remHours = (remMs + TimeUnit.HOURS.toMillis(1) - 1L) / TimeUnit.HOURS.toMillis(1)
+        return "App Not Updated (${remHours}h remaining)"
+    }
+
+    private fun handleRiderAppNewUpdateClick(ctx: Context, soundEnabled: Boolean) {
+        if (!isNewUpdateReadyNow()) {
+            val statusMsg = getUpdateRemainingHoursText()
+            Toast.makeText(
+                ctx,
+                "$statusMsg • आपका मौजूदा ऐप सामान्य रूप से चलता रहेगा।",
+                Toast.LENGTH_LONG
+            ).show()
+            speakText(ctx, soundEnabled, "अभी कोई नया ऐप अपडेट उपलब्ध नहीं है। आपका ऐप सामान्य रूप से चल रहा है।")
+            return
+        }
+
+        val targetLink = tgUrl.trim().ifEmpty { "https://t.me/captain_smart_pro" }
+        Toast.makeText(
+            ctx,
+            "नया अपडेट उपलब्ध है! Telegram चैनल खोला जा रहा है...",
+            Toast.LENGTH_SHORT
+        ).show()
+        try {
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetLink)))
+        } catch (_: Exception) {
+            Toast.makeText(ctx, targetLink, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun createGlowingFeatureDrawable(feature: GlowingFeatureIcon, sizePx: Int = 78): Drawable {
+        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val s = sizePx.toFloat()
+        val mainColor = Color.parseColor(feature.accentHex)
+        val glowColor = Color.parseColor(feature.glowHex)
+
+        val auraPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = glowColor
+            alpha = 65
+        }
+        canvas.drawRoundRect(RectF(2f, 2f, s - 2f, s - 2f), s * 0.28f, s * 0.28f, auraPaint)
+
+        val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#0D1830")
+        }
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = mainColor
+            style = Paint.Style.STROKE
+            strokeWidth = s * 0.045f
+        }
+        canvas.drawRoundRect(RectF(6f, 6f, s - 6f, s - 6f), s * 0.24f, s * 0.24f, bodyPaint)
+        canvas.drawRoundRect(RectF(6f, 6f, s - 6f, s - 6f), s * 0.24f, s * 0.24f, borderPaint)
+
+        val fgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = mainColor
+            style = Paint.Style.FILL
+        }
+        val brightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = glowColor
+            style = Paint.Style.FILL
+        }
+        val strokeFg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = glowColor
+            style = Paint.Style.STROKE
+            strokeWidth = s * 0.045f
+            strokeCap = Paint.Cap.ROUND
+        }
+
+        when (feature) {
+            GlowingFeatureIcon.AI_HELP -> {
+                canvas.drawCircle(s * 0.50f, s * 0.44f, s * 0.17f, fgPaint)
+                canvas.drawCircle(s * 0.44f, s * 0.42f, s * 0.035f, Color.BLACK)
+                canvas.drawCircle(s * 0.56f, s * 0.42f, s * 0.035f, Color.BLACK)
+                canvas.drawLine(s * 0.50f, s * 0.20f, s * 0.50f, s * 0.27f, strokeFg)
+                canvas.drawCircle(s * 0.50f, s * 0.18f, s * 0.045f, brightPaint)
+                canvas.drawRoundRect(RectF(s * 0.30f, s * 0.64f, s * 0.70f, s * 0.76f), 8f, 8f, fgPaint)
+            }
+            GlowingFeatureIcon.OLA_RAPIDO -> {
+                val bolt = Path().apply {
+                    moveTo(s * 0.56f, s * 0.18f)
+                    lineTo(s * 0.30f, s * 0.54f)
+                    lineTo(s * 0.48f, s * 0.54f)
+                    lineTo(s * 0.42f, s * 0.82f)
+                    lineTo(s * 0.70f, s * 0.46f)
+                    lineTo(s * 0.52f, s * 0.46f)
+                    close()
+                }
+                canvas.drawPath(bolt, fgPaint)
+            }
+            GlowingFeatureIcon.SOUND_TTS -> {
+                val speaker = Path().apply {
+                    moveTo(s * 0.24f, s * 0.40f)
+                    lineTo(s * 0.38f, s * 0.40f)
+                    lineTo(s * 0.54f, s * 0.25f)
+                    lineTo(s * 0.54f, s * 0.75f)
+                    lineTo(s * 0.38f, s * 0.60f)
+                    lineTo(s * 0.24f, s * 0.60f)
+                    close()
+                }
+                canvas.drawPath(speaker, fgPaint)
+                canvas.drawArc(RectF(s * 0.52f, s * 0.34f, s * 0.72f, s * 0.66f), -55f, 110f, false, strokeFg)
+                canvas.drawArc(RectF(s * 0.58f, s * 0.25f, s * 0.82f, s * 0.75f), -55f, 110f, false, strokeFg)
+            }
+            GlowingFeatureIcon.AUTO_ACCEPT -> {
+                canvas.drawCircle(s * 0.50f, s * 0.50f, s * 0.24f, fgPaint)
+                val check = Path().apply {
+                    moveTo(s * 0.38f, s * 0.51f)
+                    lineTo(s * 0.47f, s * 0.61f)
+                    lineTo(s * 0.64f, s * 0.40f)
+                }
+                val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#091122")
+                    style = Paint.Style.STROKE
+                    strokeWidth = s * 0.06f
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                }
+                canvas.drawPath(check, checkPaint)
+            }
+            GlowingFeatureIcon.SCREENSHOT -> {
+                canvas.drawRoundRect(RectF(s * 0.22f, s * 0.32f, s * 0.78f, s * 0.72f), 10f, 10f, fgPaint)
+                canvas.drawRoundRect(RectF(s * 0.36f, s * 0.22f, s * 0.64f, s * 0.34f), 6f, 6f, brightPaint)
+                canvas.drawCircle(s * 0.50f, s * 0.52f, s * 0.13f, Color.parseColor("#091122"))
+                canvas.drawCircle(s * 0.50f, s * 0.52f, s * 0.06f, brightPaint)
+            }
+        }
+        return BitmapDrawable(resources, bmp)
     }
 
     private fun createVehicleIconDrawable(category: VehicleCategory, sizePx: Int = 116): Drawable {
@@ -1387,11 +1542,15 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 
         fbUrl = prefs.getString("social_fb", "") ?: ""
         waUrl = prefs.getString("social_wa", "") ?: ""
-        twUrl = prefs.getString("social_tw", "") ?: ""
+        tgUrl = prefs.getString("social_tg", "https://t.me/captain_smart_pro") ?: "https://t.me/captain_smart_pro"
         ytUrl = prefs.getString("social_yt", "") ?: ""
         broadcastMessage = prefs.getString("broadcast_msg", "") ?: ""
         customQrTitle = prefs.getString("custom_qr_title", "Rider Payment QR") ?: "Rider Payment QR"
         customQrBase64 = prefs.getString("custom_qr_b64", "") ?: ""
+
+        updateEnabledFlag = prefs.getBoolean("app_update_enabled", false)
+        updateReleasedAtMillis = prefs.getLong("app_update_released_at", 0L)
+        updateDelayHours = prefs.getLong("app_update_delay_hours", 24L).coerceAtLeast(0L)
 
         val riderName = prefs.getString("rider_full_name", "") ?: ""
         val riderMobile = prefs.getString("rider_mobile_id", "") ?: ""
@@ -1454,11 +1613,19 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 
                 fbUrl = snap.child("facebook").getValue(String::class.java) ?: fbUrl
                 waUrl = snap.child("whatsapp").getValue(String::class.java) ?: waUrl
-                twUrl = snap.child("twitter").getValue(String::class.java) ?: twUrl
+                val dbTg = snap.child("telegram").getValue(String::class.java)
+                if (!dbTg.isNullOrBlank()) tgUrl = dbTg
                 ytUrl = snap.child("youtube").getValue(String::class.java) ?: ytUrl
                 broadcastMessage = snap.child("broadcast").getValue(String::class.java) ?: broadcastMessage
                 customQrTitle = snap.child("qrTitle").getValue(String::class.java) ?: customQrTitle
                 customQrBase64 = snap.child("qrBase64").getValue(String::class.java) ?: customQrBase64
+
+                val dbUpdEnabled = snap.child("updateEnabled").getValue(Boolean::class.java)
+                if (dbUpdEnabled != null) updateEnabledFlag = dbUpdEnabled
+                val dbUpdReleased = snap.child("updateReleasedAt").getValue(Long::class.java)
+                if (dbUpdReleased != null) updateReleasedAtMillis = dbUpdReleased
+                val dbUpdDelay = snap.child("updateDelayHours").getValue(Long::class.java)
+                if (dbUpdDelay != null && dbUpdDelay >= 0L) updateDelayHours = dbUpdDelay
 
                 prefs.edit()
                     .putInt("plan_1m_price", plan1MonthPrice)
@@ -1466,11 +1633,14 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     .putInt("plan_3m_price", plan3MonthPrice)
                     .putString("social_fb", fbUrl)
                     .putString("social_wa", waUrl)
-                    .putString("social_tw", twUrl)
+                    .putString("social_tg", tgUrl)
                     .putString("social_yt", ytUrl)
                     .putString("broadcast_msg", broadcastMessage)
                     .putString("custom_qr_title", customQrTitle)
                     .putString("custom_qr_b64", customQrBase64)
+                    .putBoolean("app_update_enabled", updateEnabledFlag)
+                    .putLong("app_update_released_at", updateReleasedAtMillis)
+                    .putLong("app_update_delay_hours", updateDelayHours)
                     .apply()
             }
         } catch (_: Exception) {
@@ -2096,6 +2266,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         val mSub = "💳 Subscription (Days +/-)"
         val mPlans = "🏷️ Plan Prices (1M/2M/3M)"
         val mTrial = "⏳ Free Trial Days"
+        val mUpdateCtrl = "🔄 App Update Control (24h / OFF / ON)"
         val mChat = "💬 Rider Chat & Voice Listen"
         val mBlock = "🛡️ Block / Unblock Rider"
         val mQrLinks = "📱 QR Code & Social Links"
@@ -2108,6 +2279,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             popup.menu.add(mSub)
             popup.menu.add(mPlans)
             popup.menu.add(mTrial)
+            popup.menu.add(mUpdateCtrl)
             popup.menu.add(mChat)
             popup.menu.add(mBlock)
             popup.menu.add(mQrLinks)
@@ -2119,6 +2291,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     mSub -> openSubscriptionManagerDialog(ctx, defaultRiderId)
                     mPlans -> openPlanPricesDialog(ctx)
                     mTrial -> openTrialManagerDialog(ctx, defaultRiderId)
+                    mUpdateCtrl -> openAdminAppUpdateControlDialog(ctx)
                     mChat -> openAdminRiderChatDialog(ctx, defaultRiderId)
                     mBlock -> openBlockRiderDialog(ctx, defaultRiderId)
                     mQrLinks -> openAdminQrAndLinksDialog(ctx)
@@ -2136,6 +2309,155 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         scroll.addView(col)
         root.addView(scroll)
         setContentView(root)
+    }
+
+    private fun openAdminAppUpdateControlDialog(ctx: Context) {
+        val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 24, 32, 20)
+        }
+
+        val enableSw = Switch(ctx).apply {
+            text = "Enable App New Update System"
+            isChecked = updateEnabledFlag
+        }
+
+        val delayEt = EditText(ctx).apply {
+            hint = "Delay Hours (e.g. 24 or 0 for instant)"
+            setText(updateDelayHours.toString())
+            inputType = InputType.TYPE_CLASS_NUMBER
+        }
+
+        val tgLinkEt = EditText(ctx).apply {
+            hint = "Telegram Channel Link"
+            setText(tgUrl.ifBlank { "https://t.me/captain_smart_pro" })
+        }
+
+        val statusInfoTv = TextView(ctx).apply {
+            val ready = isNewUpdateReadyNow()
+            text = if (!updateEnabledFlag) {
+                "Status: OFF (Trial mode — Rider sees App Not Updated)"
+            } else if (ready) {
+                "Status: READY NOW (Rider goes to Telegram link)"
+            } else {
+                "Status: WAITING (${getUpdateRemainingHoursText()})"
+            }
+            textSize = 12f
+            setPadding(0, 10, 0, 10)
+        }
+
+        val start24hBtn = Button(ctx).apply {
+            text = "⏱️ Start 24h Timer From Now (ON)"
+            setOnClickListener {
+                enableSw.isChecked = true
+                delayEt.setText("24")
+                val now = System.currentTimeMillis()
+                updateEnabledFlag = true
+                updateDelayHours = 24L
+                updateReleasedAtMillis = now
+                tgUrl = tgLinkEt.text.toString().trim().ifEmpty { "https://t.me/captain_smart_pro" }
+                prefs.edit()
+                    .putBoolean("app_update_enabled", true)
+                    .putLong("app_update_delay_hours", 24L)
+                    .putLong("app_update_released_at", now)
+                    .putString("social_tg", tgUrl)
+                    .apply()
+                try {
+                    FirebaseDatabase.getInstance().reference
+                        .child("captain_smart_pro")
+                        .child("config")
+                        .updateChildren(
+                            mapOf(
+                                "updateEnabled" to true,
+                                "updateDelayHours" to 24L,
+                                "updateReleasedAt" to now,
+                                "telegram" to tgUrl
+                            )
+                        )
+                } catch (_: Exception) {
+                }
+                statusInfoTv.text = "Status: WAITING (${getUpdateRemainingHoursText()})"
+                Toast.makeText(ctx, "24-hour update timer started", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        val turnOffBtn = Button(ctx).apply {
+            text = "⛔ Turn OFF Update (Safe Trial Mode)"
+            setOnClickListener {
+                enableSw.isChecked = false
+                updateEnabledFlag = false
+                prefs.edit()
+                    .putBoolean("app_update_enabled", false)
+                    .apply()
+                try {
+                    FirebaseDatabase.getInstance().reference
+                        .child("captain_smart_pro")
+                        .child("config")
+                        .child("updateEnabled")
+                        .setValue(false)
+                } catch (_: Exception) {
+                }
+                statusInfoTv.text = "Status: OFF (Trial mode — Rider sees App Not Updated)"
+                Toast.makeText(ctx, "App Update turned OFF for safe trial", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        box.addView(enableSw)
+        box.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
+        box.addView(TextView(ctx).apply { text = "Wait Hours Before Showing Update (Default 24):" })
+        box.addView(delayEt)
+        box.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
+        box.addView(TextView(ctx).apply { text = "Telegram Channel Link:" })
+        box.addView(tgLinkEt)
+        box.addView(statusInfoTv)
+        box.addView(start24hBtn)
+        box.addView(turnOffBtn)
+
+        AlertDialog.Builder(ctx)
+            .setTitle("🔄 App Update Control (24h / OFF / ON)")
+            .setView(box)
+            .setPositiveButton("Save Settings") { _, _ ->
+                val newEnabled = enableSw.isChecked
+                val newDelay = delayEt.text.toString().trim().toLongOrNull()?.coerceAtLeast(0L) ?: 24L
+                val newTg = tgLinkEt.text.toString().trim().ifEmpty { "https://t.me/captain_smart_pro" }
+                val now = System.currentTimeMillis()
+                val newReleasedAt = if (newEnabled && (!updateEnabledFlag || updateReleasedAtMillis <= 0L)) {
+                    now
+                } else {
+                    updateReleasedAtMillis
+                }
+
+                updateEnabledFlag = newEnabled
+                updateDelayHours = newDelay
+                updateReleasedAtMillis = newReleasedAt
+                tgUrl = newTg
+
+                prefs.edit()
+                    .putBoolean("app_update_enabled", updateEnabledFlag)
+                    .putLong("app_update_delay_hours", updateDelayHours)
+                    .putLong("app_update_released_at", updateReleasedAtMillis)
+                    .putString("social_tg", tgUrl)
+                    .apply()
+
+                try {
+                    FirebaseDatabase.getInstance().reference
+                        .child("captain_smart_pro")
+                        .child("config")
+                        .updateChildren(
+                            mapOf(
+                                "updateEnabled" to updateEnabledFlag,
+                                "updateDelayHours" to updateDelayHours,
+                                "updateReleasedAt" to updateReleasedAtMillis,
+                                "telegram" to tgUrl
+                            )
+                        )
+                } catch (_: Exception) {
+                }
+                Toast.makeText(ctx, "Update settings saved", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private data class RiderEntry(
@@ -2746,9 +3068,9 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             hint = "WhatsApp Link"
             setText(waUrl)
         }
-        val twEt = EditText(ctx).apply {
-            hint = "Twitter Link"
-            setText(twUrl)
+        val tgEt = EditText(ctx).apply {
+            hint = "Telegram Channel Link"
+            setText(tgUrl.ifBlank { "https://t.me/captain_smart_pro" })
         }
         val ytEt = EditText(ctx).apply {
             hint = "YouTube Link"
@@ -2760,7 +3082,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         box.addView(pickQrBtn)
         box.addView(fbEt)
         box.addView(waEt)
-        box.addView(twEt)
+        box.addView(tgEt)
         box.addView(ytEt)
         box.addView(Button(ctx).apply {
             text = "💾 Save QR & Social Links"
@@ -2769,7 +3091,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 customQrBase64 = tempQrB64
                 fbUrl = fbEt.text.toString().trim()
                 waUrl = waEt.text.toString().trim()
-                twUrl = twEt.text.toString().trim()
+                tgUrl = tgEt.text.toString().trim().ifEmpty { "https://t.me/captain_smart_pro" }
                 ytUrl = ytEt.text.toString().trim()
 
                 prefs.edit()
@@ -2777,7 +3099,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     .putString("custom_qr_b64", customQrBase64)
                     .putString("social_fb", fbUrl)
                     .putString("social_wa", waUrl)
-                    .putString("social_tw", twUrl)
+                    .putString("social_tg", tgUrl)
                     .putString("social_yt", ytUrl)
                     .apply()
 
@@ -2791,7 +3113,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                                 "qrBase64" to customQrBase64,
                                 "facebook" to fbUrl,
                                 "whatsapp" to waUrl,
-                                "twitter" to twUrl,
+                                "telegram" to tgUrl,
                                 "youtube" to ytUrl
                             )
                         )
@@ -3504,7 +3826,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             val langLabel = tr("🌐 Language", "🌐 भाषा", "🌐 ভাষা")
             val chatLabel = tr("💬 Live Chat", "💬 लाइव चैट", "💬 লাইভ চেট")
             val linksLabel = tr("📱 Social Links", "📱 सोशल लिंक्स", "📱 ছ'চিয়েল লিংকসমূহ")
-            val aboutLabel = tr("ℹ️ About", "ℹ️ About", "ℹ️ About")
+            val aboutLabel = "ℹ️ About"
+            val newUpdateLabel = "🔄 App New Update"
 
             popup.menu.add(actLabel)
             popup.menu.add(accLabel)
@@ -3513,6 +3836,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             popup.menu.add(chatLabel)
             popup.menu.add(linksLabel)
             popup.menu.add(aboutLabel)
+            popup.menu.add(newUpdateLabel)
 
             popup.setOnMenuItemClickListener { item ->
                 when (item.title.toString()) {
@@ -3545,6 +3869,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     chatLabel -> openRiderLiveChatDialog(ctx, riderId, riderName)
                     linksLabel -> openRiderLinksDialog(ctx)
                     aboutLabel -> openAboutSectionDialog(ctx)
+                    newUpdateLabel -> handleRiderAppNewUpdateClick(ctx, swSoundTts.isChecked)
                 }
                 true
             }
@@ -3707,26 +4032,35 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             }
         }
 
-        fun buildStyledToggleRow(
+        fun buildGlowingFeatureRow(
             iconAndTitle: String,
+            glowIcon: GlowingFeatureIcon,
             statusBadge: TextView,
             toggleSwitch: Switch
         ): LinearLayout {
             return LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                background = make3dPill(cardElevated, borderSlate, 12f)
-                setPadding(14, 10, 12, 10)
+                background = make3dPill(cardElevated, Color.parseColor(glowIcon.accentHex), 12f)
+                setPadding(12, 8, 10, 8)
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { bottomMargin = 8 }
                 addView(TextView(ctx).apply {
                     text = iconAndTitle
-                    textSize = 13f
+                    textSize = 12f
                     setTypeface(null, Typeface.BOLD)
                     setTextColor(textWhite)
-                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        rightMargin = 6
+                    }
+                })
+                addView(ImageView(ctx).apply {
+                    setImageDrawable(createGlowingFeatureDrawable(glowIcon))
+                    layoutParams = LinearLayout.LayoutParams(54, 54).apply {
+                        rightMargin = 8
+                    }
                 })
                 addView(statusBadge)
                 addView(toggleSwitch)
@@ -3752,28 +4086,33 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             swFareLimit
         ))
 
-        rulesCard.addView(buildStyledToggleRow(
-            tr("🎙️ AI Help", "🎙️ AI हेल्प", "🎙️ AI সহায়"),
+        rulesCard.addView(buildGlowingFeatureRow(
+            tr("🤖 AI Help", "🤖 AI हेल्प", "🤖 AI সহায়"),
+            GlowingFeatureIcon.AI_HELP,
             badgeAiHelp,
             swAiHelp
         ))
-        rulesCard.addView(buildStyledToggleRow(
+        rulesCard.addView(buildGlowingFeatureRow(
             tr("⚡ Only Ola / Rapido", "⚡ केवल Ola / Rapido", "⚡ কেৱল Ola / Rapido"),
+            GlowingFeatureIcon.OLA_RAPIDO,
             badgeOlaRapido,
             swOnlyOlaRapido
         ))
-        rulesCard.addView(buildStyledToggleRow(
+        rulesCard.addView(buildGlowingFeatureRow(
             tr("🔊 Play Sound / TTS", "🔊 आवाज़ / TTS चलाएं", "🔊 আৱাজ / TTS চলাওক"),
+            GlowingFeatureIcon.SOUND_TTS,
             badgeSoundTts,
             swSoundTts
         ))
-        rulesCard.addView(buildStyledToggleRow(
-            tr("🤖 Auto Accept", "🤖 ऑटो एक्सेप्ट", "🤖 অটো এক্সেপ্ট"),
+        rulesCard.addView(buildGlowingFeatureRow(
+            tr("🎯 Auto Accept", "🎯 ऑटो एक्सेप्ट", "🎯 অটো এক্সেপ্ট"),
+            GlowingFeatureIcon.AUTO_ACCEPT,
             badgeAutoAccept,
             swAutoAccept
         ))
-        rulesCard.addView(buildStyledToggleRow(
+        rulesCard.addView(buildGlowingFeatureRow(
             tr("📸 Screenshot Save to Gallery", "📸 स्क्रीनशॉट गैलरी में सेव करें", "📸 স্ক্ৰীণশ্বট গেলাৰীত ছেভ কৰক"),
+            GlowingFeatureIcon.SCREENSHOT,
             badgeScreenshot,
             swScreenshot
         ))
@@ -3825,7 +4164,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
         }
-        rowB.addView(makeSmallSocialBtn(ctx, "twitter", twUrl, 6))
+        rowB.addView(makeSmallSocialBtn(ctx, "telegram", tgUrl.ifBlank { "https://t.me/captain_smart_pro" }, 6))
         rowB.addView(makeSmallSocialBtn(ctx, "youtube", ytUrl, 0))
         linksCard.addView(rowB)
 
