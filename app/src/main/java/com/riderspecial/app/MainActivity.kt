@@ -360,7 +360,6 @@ class MainActivity : Activity() {
                 canvas.drawPath(bolt, goldPaint)
             }
             VehicleCategory.EV_SCOOTY -> {
-                // Electric Scooty (Battery / Electricity Scooty) with green body & lightning bolts
                 canvas.drawLine(s * 0.34f, s * 0.29f, s * 0.27f, s * 0.21f, tireStroke)
                 canvas.drawLine(s * 0.66f, s * 0.29f, s * 0.73f, s * 0.21f, tireStroke)
                 canvas.drawOval(RectF(s * 0.21f, s * 0.17f, s * 0.32f, s * 0.24f), bodyPaint)
@@ -376,7 +375,6 @@ class MainActivity : Activity() {
                 }
                 canvas.drawPath(apron, bodyPaint)
                 canvas.drawRoundRect(RectF(s * 0.45f, s * 0.63f, s * 0.55f, s * 0.84f), 6f, 6f, whiteFill)
-                // Bright electric lightning symbol on apron
                 val bolt = Path().apply {
                     moveTo(s * 0.53f, s * 0.41f)
                     lineTo(s * 0.44f, s * 0.52f)
@@ -389,10 +387,8 @@ class MainActivity : Activity() {
                 canvas.drawPath(bolt, goldPaint)
             }
             VehicleCategory.SCOOTY -> {
-                // Petrol Scooty (side profile classic scooter with step-through footboard & fuel cap badge)
                 canvas.drawCircle(s * 0.26f, s * 0.71f, s * 0.12f, tireStroke)
                 canvas.drawCircle(s * 0.74f, s * 0.71f, s * 0.12f, tireStroke)
-                // Rear body cowl & seat
                 val rearBody = Path().apply {
                     moveTo(s * 0.18f, s * 0.54f)
                     quadTo(s * 0.32f, s * 0.43f, s * 0.48f, s * 0.48f)
@@ -401,9 +397,7 @@ class MainActivity : Activity() {
                     close()
                 }
                 canvas.drawPath(rearBody, bodyPaint)
-                // Step-through footboard
                 canvas.drawRoundRect(RectF(s * 0.44f, s * 0.60f, s * 0.64f, s * 0.66f), 4f, 4f, whiteFill)
-                // Front leg-shield & handlebar
                 val frontShield = Path().apply {
                     moveTo(s * 0.60f, s * 0.34f)
                     lineTo(s * 0.70f, s * 0.36f)
@@ -413,7 +407,6 @@ class MainActivity : Activity() {
                 }
                 canvas.drawPath(frontShield, bodyPaint)
                 canvas.drawCircle(s * 0.69f, s * 0.34f, s * 0.045f, goldPaint)
-                // Petrol fuel badge dot on side cowl
                 canvas.drawCircle(s * 0.33f, s * 0.55f, s * 0.045f, redFuelPaint)
             }
         }
@@ -473,7 +466,7 @@ class MainActivity : Activity() {
             q.contains("चैट") || q.contains("chat") || q.contains("एडमिन") || q.contains("admin") || q.contains("फोटो") ->
                 "तीन डॉट मेनू के लाइव चैट से आप एडमिन को मैसेज और फ़ोटो भेज सकते हैं। ज़रूरत पड़ने पर एडमिन आपसे संपर्क करेंगे।"
             else ->
-                "आपका सवाल सुना गया। इस ऐप में पिकअप, ड्रॉप और किराए के ऑन-ऑफ़ स्विच सेट करके सेव करें, ऊपर तीन डॉट मेनू से इंजन एक्टिव करें और लोकेशन व एक्सेसिबिलिटी चालू रखें।"
+                "आपका सवाल सुना गया। इस ऐप में पिकअप, ड्रॉप और किराए के ऑन-ऑफ़ स्विच और मान सेट करके सेव करें, ऊपर तीन डॉट मेनू से इंजन एक्टिव करें और लोकेशन व एक्सेसिबिलिटी चालू रखें।"
         }
     }
 
@@ -506,7 +499,27 @@ class MainActivity : Activity() {
             .show()
     }
 
-    private fun handleAiVoiceHelpClick(ctx: Context, riderId: String, onQuotaChanged: () -> Unit) {
+    private fun handleAiVoiceHelpClick(
+        ctx: Context,
+        riderId: String,
+        aiSwitchOn: Boolean,
+        soundEnabled: Boolean,
+        onQuotaChanged: () -> Unit
+    ) {
+        if (!aiSwitchOn) {
+            speakText(
+                ctx,
+                soundEnabled,
+                tr("AI Help is off. Turn on AI Help switch first.", "AI हेल्प बंद है। पहले AI हेल्प स्विच चालू करें।", "AI সহায় বন্ধ আছে। প্ৰথমে AI সহায় চুইচ অন কৰক।")
+            )
+            Toast.makeText(
+                ctx,
+                tr("Turn ON AI Help switch first", "पहले AI Help स्विच चालू करें", "প্ৰথমে AI Help চুইচ অন কৰক"),
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
         val remaining = getAiQuestionsRemainingToday(ctx, riderId)
         if (remaining <= 0) {
             speakText(
@@ -520,7 +533,7 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
             ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != 0
         ) {
-            pendingAiVoiceStart = { handleAiVoiceHelpClick(ctx, riderId, onQuotaChanged) }
+            pendingAiVoiceStart = { handleAiVoiceHelpClick(ctx, riderId, aiSwitchOn, soundEnabled, onQuotaChanged) }
             requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), reqAudioPerm)
             return
         }
@@ -530,12 +543,18 @@ class MainActivity : Activity() {
             true,
             "कैप्टन स्मार्ट प्रो में आपको मैं किस तरह से मदद कर सकता हूं?",
             onDone = {
-                startSilentHindiVoiceListener(ctx, riderId, onQuotaChanged)
+                startSilentHindiVoiceListener(ctx, riderId, aiSwitchOn, soundEnabled, onQuotaChanged)
             }
         )
     }
 
-    private fun startSilentHindiVoiceListener(ctx: Context, riderId: String, onQuotaChanged: () -> Unit) {
+    private fun startSilentHindiVoiceListener(
+        ctx: Context,
+        riderId: String,
+        aiSwitchOn: Boolean,
+        soundEnabled: Boolean,
+        onQuotaChanged: () -> Unit
+    ) {
         try {
             if (!SpeechRecognizer.isRecognitionAvailable(ctx)) {
                 speakText(ctx, true, "आपके फ़ोन में वॉइस पहचान सेवा उपलब्ध नहीं है।")
@@ -553,7 +572,7 @@ class MainActivity : Activity() {
                 override fun onError(error: Int) {
                     if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                         showMicPermissionOnDialog(ctx) {
-                            handleAiVoiceHelpClick(ctx, riderId, onQuotaChanged)
+                            handleAiVoiceHelpClick(ctx, riderId, aiSwitchOn, soundEnabled, onQuotaChanged)
                         }
                     } else {
                         speakText(ctx, true, "आवाज़ साफ़ सुनाई नहीं दी, कृपया फिर से दबाकर बोलें।")
@@ -583,7 +602,7 @@ class MainActivity : Activity() {
             recognizer.startListening(intent)
         } catch (_: Exception) {
             showMicPermissionOnDialog(ctx) {
-                handleAiVoiceHelpClick(ctx, riderId, onQuotaChanged)
+                handleAiVoiceHelpClick(ctx, riderId, aiSwitchOn, soundEnabled, onQuotaChanged)
             }
         }
     }
@@ -1087,18 +1106,18 @@ Dear Rider Brothers,
 Respect and salutation to every captain working hard across weather, traffic, and daily challenges to support family and dreams. Captain Smart Pro is designed to make your daily work smooth, clear, and organized—whether you ride Bike, Auto, Cab, E-Rickshaw, EV Scooty, or Scooty.
 
 1. How Rules Work (Pickup, Drop, Fare & Auto Accept)
-• Pickup Distance (Km), Drop Distance (Km), and Ride Amount / Fare (₹) each have their own On/Off switch on the right side.
+• Pickup Distance (Km), Drop Distance (Km), and Ride Amount / Fare (₹) each have their editable value box and On/Off switch right alongside.
 • When a rule is ON, the app checks according to that set distance or fare limit.
 • When Pickup, Drop, and Ride Amount / Fare are all OFF and Auto Accept is ON, there is no distance or fare filter restriction.
 • Always tap SAVE RIDER PREFERENCES after updating rules.
 
 2. Step-by-Step Guide to Use the App
 1) Profile & Vehicle: Enter name, mobile number, and tap your vehicle icon.
-2) Rules & Parcel Mode: Set Pickup, Drop, and Fare On/Off switches. Use PARCEL: ON for parcel-only shifts or keep as needed.
+2) Rules & Parcel Mode: Edit values and set Pickup, Drop, and Fare On/Off switches. Use PARCEL: ON for parcel-only shifts or keep as needed.
 3) Engine, Location & Accessibility: Open top-right ⋮ menu and tap Activate Engine. Keep Phone Location (GPS) and Accessibility Settings ON. Accessibility Settings must be ON so screenshots can be captured and saved to Gallery.
 4) Voice / TTS Alerts: Toggling switches and buttons announces On/Off status when Media Volume is up.
 5) Share Live Location: Tap SHARE LIVE LOCATION to share your current location link and status with family or friends via WhatsApp or other apps.
-6) AI Voice Help (3 Questions / 24h): Tap AI HELP (and allow Mic permission) to ask up to 3 voice questions in Hindi every 24 hours.
+6) AI Voice Help (3 Questions / 24h): Turn ON the AI Help switch and tap AI HELP (with Mic permission) to ask up to 3 voice questions in Hindi every 24 hours.
 
 3. Language, Listen Button & Support (Live Chat, Photo & Recording)
 • Choose English, हिन्दी, or অসমীয়া from ⋮ > Language; this About guide updates in your chosen language.
@@ -1114,18 +1133,18 @@ Captain Smart Pro — राइडर भाइयों का अपना स
 सड़क पर हर मौसम, हर ट्रैफ़िक और हर चुनौती के बीच मेहनत करके अपने परिवार और सपनों को आगे बढ़ाने वाले हर कप्तान को दिल से सलाम। Captain Smart Pro इसी सोच के साथ बनाया गया है कि आपके रोज़ के काम को आसान, साफ़ और व्यवस्थित बनाया जाए। चाहे आप Bike, Auto, Cab, E-Rickshaw, EV Scooty या Scooty चलाते हों—सही नियम और सही आदतों से काम करना हमेशा फ़ायदेमंद होता है।
 
 1. नियम कैसे काम करते हैं? (Pickup, Drop, Fare और Auto Accept)
-• Pickup Distance (Km), Drop Distance (Km) और Ride Amount / Fare (₹)—हर नियम की लाइन में दाएँ तरफ़ उसका On/Off स्विच दिया गया है।
+• Pickup Distance (Km), Drop Distance (Km) और Ride Amount / Fare (₹)—हर एक के साथ उसी लाइन में बदलने लायक मान (Km/₹) और On/Off स्विच दिया गया है।
 • जब कोई नियम On रहता है, तो ऐप उसी तय दूरी या किराए के हिसाब से नियम लागू करता है।
 • जब Pickup, Drop और Ride Amount / Fare तीनों Off रहते हैं और Auto Accept On रहता है, तो ऐप की किसी भी दूरी या किराए वाले नियम की रोक नहीं लगती।
 • नियम बदलने के बाद SAVE RIDER PREFERENCES दबाना न भूलें।
 
 2. ऐप को शुरू से कैसे चलाना है?
 1) वाहन और प्रोफ़ाइल: अपना नाम, मोबाइल नंबर और सही वाहन चुनें।
-2) नियम और पार्सल मोड: Pickup, Drop और Fare के On/Off स्विच सेट करें। केवल पार्सल के काम के लिए PARCEL: ON और सामान्य काम के लिए अपनी सुविधा अनुसार रखें।
+2) नियम और पार्सल मोड: मान बदलें और Pickup, Drop व Fare के On/Off स्विच सेट करें। केवल पार्सल के काम के लिए PARCEL: ON और सामान्य काम के लिए अपनी सुविधा अनुसार रखें।
 3) इंजन, लोकेशन और एक्सेसिबिलिटी: ऊपर ⋮ मेनू से Activate Engine दबाएं। फ़ोन में Location (GPS) और Accessibility Settings चालू रखें। Accessibility Settings ऑन रहना ज़रूरी है ताकि स्क्रीनशॉट क्लिक हो और गैलरी में सेव हो सके।
 4) आवाज़ (TTS) की सूचना: बटन या स्विच On/Off करने पर आवाज़ में सूचना मिलती है (फ़ोन की मीडिया आवाज़ चालू रखें)।
 5) लाइव लोकेशन शेयर करना: SHARE LIVE LOCATION दबाकर अपनी ताज़ा लोकेशन का लिंक और स्थिति WhatsApp या अन्य ऐप से घर, परिवार या दोस्त को भेजें।
-6) AI वॉइस मदद (24 घंटे में 3 सवाल): AI HELP दबाकर (माइक अनुमति ऑन करके) आप 24 घंटे में 3 बार हिन्दी में बोलकर सवाल पूछ सकते हैं और अगले दिन फिर से 3 सवाल पूछ सकेंगे।
+6) AI वॉइस मदद (24 घंटे में 3 सवाल): AI Help स्विच चालू रखें और AI HELP दबाकर (माइक अनुमति ऑन करके) 24 घंटे में 3 बार हिन्दी में बोलकर सवाल पूछें और अगले दिन फिर से 3 सवाल पूछ सकें।
 
 3. भाषा, सुनने का बटन और सहायता (Live Chat, फ़ोटो और रिकॉर्डिंग)
 • ⋮ मेनू से Language चुनकर English, हिन्दी या অসমীয়া में ऐप और About पढ़ सकते हैं।
@@ -1141,18 +1160,18 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 পৰিয়াল আৰু সপোন আগবঢ়াই নিবলৈ ৰ'দ-বৰষুণ, যান-জঁট আৰু প্ৰত্যাহ্বানৰ মাজত পৰিশ্ৰম কৰা প্ৰতিগৰাকী কেপ্টেইনলৈ আন্তৰিক শ্ৰদ্ধা। Bike, Auto, Cab, E-Rickshaw, EV Scooty বা Scooty যিয়েই নচলাওক—সঠিক নিয়ম আৰু অভ্যাসে কাম সহজ আৰু সুশৃংখল কৰে।
 
 ১. নিয়ম কেনেকৈ চলে? (Pickup, Drop, Fare আৰু Auto Accept)
-• Pickup Distance (Km), Drop Distance (Km) আৰু Ride Amount / Fare (₹)—প্ৰতিটোৰ সোঁফালে On/Off চুইচ আছে।
+• Pickup Distance (Km), Drop Distance (Km) আৰু Ride Amount / Fare (₹)—প্ৰতিটোৰ লগতে মান সলনি কৰিব পৰা বক্স আৰু On/Off চুইচ আছে।
 • নিয়ম ON থাকিলে নিৰ্ধাৰিত দূৰত্ব বা ভাড়া অনুসৰি পৰীক্ষা কৰা হয়।
 • Pickup, Drop আৰু Ride Amount / Fare তিনিওটা OFF আৰু Auto Accept ON থাকিলে কোনো দূৰত্ব বা ভাড়াৰ বাধা নাথাকে।
 • সলনি কৰাৰ পাছত SAVE RIDER PREFERENCES টিপিব।
 
 ২. এপ কেনেকৈ চলাব?
 ১) প্ৰফাইল আৰু বাহন: নাম, মোবাইল নম্বৰ আৰু বাহনৰ আইকন বাছনি কৰক।
-২) নিয়ম আৰু পাৰ্চেল মোড: Pickup, Drop আৰু Fare চুইচ ছেট কৰক; পাৰ্চেলৰ বাবে PARCEL: ON ব্যৱহাৰ কৰক।
+২) নিয়ম আৰু পাৰ্চেল মোড: মান সলনি কৰি Pickup, Drop আৰু Fare চুইচ ছেট কৰক; পাৰ্চেলৰ বাবে PARCEL: ON ব্যৱহাৰ কৰক।
 ৩) ইঞ্জিন, লোকেচন আৰু এক্সেচিবিলিটি: ওপৰৰ ⋮ মেনুৰ পৰা Activate Engine টিপক। Location (GPS) আৰু Accessibility Settings ON ৰাখক—স্ক্ৰীণশ্বট লৈ গেলাৰীত ছেভ হ'বলৈ Accessibility Settings ON থকাটো প্ৰয়োজন।
 ৪) আৱাজ (TTS): চুইচ/বুটাম On/Off কৰিলে আৱাজ শুনা যায় (Media Volume অন ৰাখক)।
 ৫) লাইভ লোকেচন শ্বেয়াৰ: SHARE LIVE LOCATION টিপি পৰিয়াল বা বন্ধুক লোকেচন লিংক পঠিয়াব পাৰে।
-৬) AI সহায়: মাইক অনুমতি অন কৰি ২৪ ঘণ্টাত ৩ বাৰ হিন্দীত প্ৰশ্ন সুধিব পাৰিব।
+৬) AI সহায়: AI Help চুইচ ON ৰাখি মাইক অনুমতি অন কৰি ২৪ ঘণ্টাত ৩ বাৰ হিন্দীত প্ৰশ্ন সুধিব পাৰিব।
 
 ৩. ভাষা, Play বুটাম আৰু সহায়
 • ⋮ > Language ৰ পৰা English, हिन्दी বা অসমীয়া বাছনি কৰক।
@@ -2881,6 +2900,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         swDropLimit: Switch,
         amountEt: EditText,
         swFareLimit: Switch,
+        swAiHelp: Switch,
         swOnlyOlaRapido: Switch,
         swSoundTts: Switch,
         swAutoAccept: Switch,
@@ -2916,6 +2936,10 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             text = tr("Fare / Amount Limit (On/Off)", "किराया / अमाउंट सीमा (On/Off)", "ভাড়া / অমাউণ্ট সীমা (On/Off)")
             isChecked = swFareLimit.isChecked
         }
+        val aiSw = Switch(ctx).apply {
+            text = tr("AI Help (On/Off)", "AI हेल्प (On/Off)", "AI সহায় (On/Off)")
+            isChecked = swAiHelp.isChecked
+        }
         val s1 = Switch(ctx).apply {
             text = tr("Only Ola/Rapido", "केवल Ola/Rapido", "কেৱল Ola/Rapido")
             isChecked = swOnlyOlaRapido.isChecked
@@ -2942,6 +2966,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         box.addView(TextView(ctx).apply { text = tr("Fare / Amount (₹):", "किराया / अमाउंट (₹):", "ভাড়া / অমাউণ্ট (₹):") })
         box.addView(aEt)
         box.addView(fSw)
+        box.addView(aiSw)
         box.addView(s1)
         box.addView(s2)
         box.addView(s3)
@@ -2962,6 +2987,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 swDropLimit.isChecked = dSw.isChecked
                 amountEt.setText(aEt.text.toString().trim())
                 swFareLimit.isChecked = fSw.isChecked
+                swAiHelp.isChecked = aiSw.isChecked
                 swOnlyOlaRapido.isChecked = s1.isChecked
                 swSoundTts.isChecked = s2.isChecked
                 swAutoAccept.isChecked = s3.isChecked
@@ -3130,11 +3156,11 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 if (isOn) accentGreenBright else borderSlate,
                 10f
             )
-            setPadding(12, 4, 12, 4)
+            setPadding(10, 4, 10, 4)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { rightMargin = 8 }
+            ).apply { rightMargin = 6 }
         }
     }
 
@@ -3156,6 +3182,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         val dropLimitDef = prefs.getBoolean("drop_limit_on", false)
         val fareDef = prefs.getString("fare_rs", "20") ?: "20"
         val fareLimitDef = prefs.getBoolean("fare_limit_on", true)
+        val aiHelpDef = prefs.getBoolean("ai_help_on", true)
         val vehicleCat = VehicleCategory.fromKey(prefs.getString("rider_vehicle_type", "bike")) ?: VehicleCategory.BIKE
 
         var isEngineActivated = false
@@ -3291,9 +3318,31 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         }
         gpsUiHandler.post(gpsUiRunnable)
 
-        val pickupEt = makeStyledInput(ctx, pickupDef, "Pickup Km")
-        val dropEt = makeStyledInput(ctx, dropDef, "Drop Km")
-        val amountEt = makeStyledInput(ctx, fareDef, "Fare / Amount ₹")
+        fun makeInlineValueBox(defVal: String, hintVal: String, isDecimal: Boolean): EditText {
+            return EditText(ctx).apply {
+                setText(defVal)
+                hint = hintVal
+                setTextColor(textWhite)
+                setHintTextColor(textMuted)
+                textSize = 13f
+                setTypeface(null, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                inputType = if (isDecimal) {
+                    InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                } else {
+                    InputType.TYPE_CLASS_NUMBER
+                }
+                background = make3dPill(cardDark, accentGold, 10f)
+                setPadding(10, 6, 10, 6)
+                layoutParams = LinearLayout.LayoutParams(126, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    rightMargin = 6
+                }
+            }
+        }
+
+        val pickupEt = makeInlineValueBox(pickupDef, "Km", true)
+        val dropEt = makeInlineValueBox(dropDef, "Km", true)
+        val amountEt = makeInlineValueBox(fareDef, "₹", false)
 
         val rulesSummaryTv = TextView(ctx).apply {
             textSize = 12f
@@ -3304,6 +3353,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         val swPickupLimit = Switch(ctx).apply { isChecked = pickupLimitDef }
         val swDropLimit = Switch(ctx).apply { isChecked = dropLimitDef }
         val swFareLimit = Switch(ctx).apply { isChecked = fareLimitDef }
+        val swAiHelp = Switch(ctx).apply { isChecked = aiHelpDef }
         val swOnlyOlaRapido = Switch(ctx).apply { isChecked = true }
         val swSoundTts = Switch(ctx).apply { isChecked = true }
         val swAutoAccept = Switch(ctx).apply { isChecked = true }
@@ -3312,6 +3362,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         val badgePickup = makeStatusPillBadge(ctx, swPickupLimit.isChecked)
         val badgeDrop = makeStatusPillBadge(ctx, swDropLimit.isChecked)
         val badgeFare = makeStatusPillBadge(ctx, swFareLimit.isChecked)
+        val badgeAiHelp = makeStatusPillBadge(ctx, swAiHelp.isChecked)
         val badgeOlaRapido = makeStatusPillBadge(ctx, swOnlyOlaRapido.isChecked)
         val badgeSoundTts = makeStatusPillBadge(ctx, swSoundTts.isChecked)
         val badgeAutoAccept = makeStatusPillBadge(ctx, swAutoAccept.isChecked)
@@ -3331,9 +3382,9 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     "⚡ সকলো সীমা OFF: দূৰত্ব বা ভাড়াৰ কোনো বাধা নাই।"
                 )
             } else {
-                val pPart = if (pOn) "Pickup <= ${pKm}Km (ON)" else "Pickup (OFF)"
-                val dPart = if (dOn) "Drop <= ${dKm}Km (ON)" else "Drop (OFF)"
-                val fPart = if (fOn) "Fare >= ₹$fRs (ON)" else "Fare (OFF)"
+                val pPart = if (pOn) "Pickup <= ${pKm}Km (ON)" else "Pickup $pKm (OFF)"
+                val dPart = if (dOn) "Drop <= ${dKm}Km (ON)" else "Drop $dKm (OFF)"
+                val fPart = if (fOn) "Fare >= ₹$fRs (ON)" else "Fare ₹$fRs (OFF)"
                 "$pPart • $dPart • $fPart"
             }
         }
@@ -3353,6 +3404,10 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             updateStatusPillBadge(badgeFare, isChecked)
             refreshRulesSummary()
             speakSwitchState(ctx, swSoundTts.isChecked, tr("Fare limit", "किराया सीमा", "ভাড়া সীমা"), isChecked)
+        }
+        swAiHelp.setOnCheckedChangeListener { _, isChecked ->
+            updateStatusPillBadge(badgeAiHelp, isChecked)
+            speakSwitchState(ctx, swSoundTts.isChecked, tr("AI Help", "AI हेल्प", "AI সহায়"), isChecked)
         }
         swOnlyOlaRapido.setOnCheckedChangeListener { _, isChecked ->
             updateStatusPillBadge(badgeOlaRapido, isChecked)
@@ -3385,6 +3440,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 .putBoolean("drop_limit_on", swDropLimit.isChecked)
                 .putString("fare_rs", amountEt.text.toString().trim())
                 .putBoolean("fare_limit_on", swFareLimit.isChecked)
+                .putBoolean("ai_help_on", swAiHelp.isChecked)
                 .putBoolean("parcel_mode_on", isParcelModeOn)
                 .apply()
             speakText(ctx, swSoundTts.isChecked, tr("Rider preferences saved", "सेटिंग्स सेव हो गई हैं", "ৰাইডাৰ ছেটিংছ ছেভ কৰা হৈছে"))
@@ -3480,7 +3536,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     accLabel -> openAccessibilityScreen(ctx)
                     setLabel -> openRiderSettingsDialog(
                         ctx, riderId, pickupEt, swPickupLimit, dropEt, swDropLimit,
-                        amountEt, swFareLimit, swOnlyOlaRapido, swSoundTts, swAutoAccept, swScreenshot, savePrefsAction
+                        amountEt, swFareLimit, swAiHelp, swOnlyOlaRapido, swSoundTts, swAutoAccept, swScreenshot, savePrefsAction
                     )
                     langLabel -> openLanguageSelectionDialog(ctx) {
                         gpsUiHandler.removeCallbacks(gpsUiRunnable)
@@ -3613,13 +3669,43 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 leftMargin = 6
             }
             setOnClickListener {
-                handleAiVoiceHelpClick(ctx, riderId) {
+                handleAiVoiceHelpClick(ctx, riderId, swAiHelp.isChecked, swSoundTts.isChecked) {
                     refreshAiButtonLabel()
                 }
             }
         }
         quickRuleRow.addView(aiHelpMicBtn)
         rulesCard.addView(quickRuleRow)
+
+        fun buildInlineEditableRuleRow(
+            iconAndTitle: String,
+            valueInput: EditText,
+            statusBadge: TextView,
+            toggleSwitch: Switch
+        ): LinearLayout {
+            return LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = make3dPill(cardElevated, borderSlate, 12f)
+                setPadding(12, 8, 10, 8)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { bottomMargin = 8 }
+                addView(TextView(ctx).apply {
+                    text = iconAndTitle
+                    textSize = 12f
+                    setTypeface(null, Typeface.BOLD)
+                    setTextColor(textWhite)
+                    layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        rightMargin = 6
+                    }
+                })
+                addView(valueInput)
+                addView(statusBadge)
+                addView(toggleSwitch)
+            }
+        }
 
         fun buildStyledToggleRow(
             iconAndTitle: String,
@@ -3647,30 +3733,31 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             }
         }
 
-        rulesCard.addView(buildStyledToggleRow(
-            tr("📍 Pickup Distance (Km)", "📍 पिकअप दूरी (किमी)", "📍 পিকআপ দূৰত্ব (কিঃমিঃ)"),
+        // Same line: Title + Editable value (Km/₹) + ON/OFF badge + ON/OFF switch
+        rulesCard.addView(buildInlineEditableRuleRow(
+            tr("📍 Pickup (Km)", "📍 पिकअप (किमी)", "📍 পিকআপ (কিঃমিঃ)"),
+            pickupEt,
             badgePickup,
             swPickupLimit
         ))
-        rulesCard.addView(pickupEt)
-        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 10) })
-
-        rulesCard.addView(buildStyledToggleRow(
-            tr("🏁 Drop Distance (Km)", "🏁 ड्रॉप दूरी (किमी)", "🏁 ড্ৰপ দূৰত্ব (কিঃমিঃ)"),
+        rulesCard.addView(buildInlineEditableRuleRow(
+            tr("🏁 Drop (Km)", "🏁 ड्रॉप (किमी)", "🏁 ড্ৰপ (কিঃমিঃ)"),
+            dropEt,
             badgeDrop,
             swDropLimit
         ))
-        rulesCard.addView(dropEt)
-        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 10) })
-
-        rulesCard.addView(buildStyledToggleRow(
-            tr("💰 Ride Amount / Fare (₹)", "💰 राइड अमाउंट / किराया (₹)", "💰 ৰাইড ভাড়া / অমাউণ্ট (₹)"),
+        rulesCard.addView(buildInlineEditableRuleRow(
+            tr("💰 Fare / Max (₹)", "💰 किराया / मैक्स (₹)", "💰 ভাড়া / মেক্স (₹)"),
+            amountEt,
             badgeFare,
             swFareLimit
         ))
-        rulesCard.addView(amountEt)
-        rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 10) })
 
+        rulesCard.addView(buildStyledToggleRow(
+            tr("🎙️ AI Help", "🎙️ AI हेल्प", "🎙️ AI সহায়"),
+            badgeAiHelp,
+            swAiHelp
+        ))
         rulesCard.addView(buildStyledToggleRow(
             tr("⚡ Only Ola / Rapido", "⚡ केवल Ola / Rapido", "⚡ কেৱল Ola / Rapido"),
             badgeOlaRapido,
