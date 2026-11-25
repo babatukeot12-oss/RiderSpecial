@@ -59,12 +59,12 @@ import java.util.concurrent.TimeUnit
 class MainActivity : Activity() {
 
     private enum class VehicleCategory(val key: String, val label: String, val accentHex: String) {
-        BIKE("bike", "Bike", "#22C55E"),
+        BIKE("bike", "Bike", "#EAB308"),
         AUTO("auto", "Auto", "#FACC15"),
-        CAB("cab", "Cab", "#38BDF8"),
-        E_RICKSHAW("e_rickshaw", "E-Rickshaw", "#A855F7"),
-        EV_SCOOTY("ev_scooty", "EV Scooty", "#10B981"),
-        SCOOTY("scooty", "Scooty", "#F97316");
+        CAB("cab", "Cab", "#F59E0B"),
+        E_RICKSHAW("e_rickshaw", "E-Rickshaw", "#FBBF24"),
+        EV_SCOOTY("ev_scooty", "EV Scooty", "#FDE047"),
+        SCOOTY("scooty", "Scooty", "#D97706");
 
         companion object {
             fun fromKey(raw: String?): VehicleCategory? {
@@ -85,11 +85,18 @@ class MainActivity : Activity() {
     }
 
     private enum class GlowingFeatureIcon(val accentHex: String, val glowHex: String) {
-        AI_HELP("#38BDF8", "#7DD3FC"),
-        OLA_RAPIDO("#FACC15", "#FEF08A"),
-        SOUND_TTS("#22C55E", "#86EFAC"),
-        AUTO_ACCEPT("#C084FC", "#E9D5FF"),
-        SCREENSHOT("#F43F5E", "#FDA4AF")
+        AI_HELP("#FACC15", "#FEF08A"),
+        OLA_RAPIDO("#EAB308", "#FDE047"),
+        SOUND_TTS("#F59E0B", "#FCD34D"),
+        AUTO_ACCEPT("#FBBF24", "#FEF9C3"),
+        SCREENSHOT("#D97706", "#FDE68A")
+    }
+
+    private enum class SocialPlatformIcon(val accentHex: String, val glowHex: String) {
+        FACEBOOK("#3B82F6", "#93C5FD"),
+        WHATSAPP("#22C55E", "#86EFAC"),
+        TELEGRAM("#38BDF8", "#BAE6FD"),
+        YOUTUBE("#EF4444", "#FCA5A5")
     }
 
     private val adminPassport = "dinakeot1990"
@@ -191,20 +198,21 @@ class MainActivity : Activity() {
         }
     }
 
-    private val bgDark = Color.parseColor("#060A14")
-    private val headerDark = Color.parseColor("#0A1224")
-    private val cardDark = Color.parseColor("#101A30")
-    private val cardElevated = Color.parseColor("#182747")
-    private val borderSlate = Color.parseColor("#2A3F66")
-    private val accentGreen = Color.parseColor("#15803D")
-    private val accentGreenBright = Color.parseColor("#22C55E")
-    private val accentBlue = Color.parseColor("#1D4ED8")
-    private val accentPurple = Color.parseColor("#6D28D9")
-    private val accentRed = Color.parseColor("#B91C1C")
-    private val accentGold = Color.parseColor("#EAB308")
-    private val accentTeal = Color.parseColor("#0369A1")
-    private val textWhite = Color.parseColor("#F8FAFC")
-    private val textMuted = Color.parseColor("#94A3B8")
+    // Classic Dark Gold Palette
+    private val bgDark = Color.parseColor("#070709")
+    private val headerDark = Color.parseColor("#110E07")
+    private val cardDark = Color.parseColor("#14110A")
+    private val cardElevated = Color.parseColor("#1E180C")
+    private val borderSlate = Color.parseColor("#8A6914")
+    private val accentGreen = Color.parseColor("#166534")
+    private val accentGreenBright = Color.parseColor("#FACC15")
+    private val accentBlue = Color.parseColor("#3A2B07")
+    private val accentPurple = Color.parseColor("#4A3506")
+    private val accentRed = Color.parseColor("#991B1B")
+    private val accentGold = Color.parseColor("#FACC15")
+    private val accentTeal = Color.parseColor("#2B2107")
+    private val textWhite = Color.parseColor("#FFFBEB")
+    private val textMuted = Color.parseColor("#C7B47B")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -295,6 +303,78 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun createSocialIconDrawable(platform: SocialPlatformIcon, sizePx: Int = 54): Drawable {
+        val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        val s = sizePx.toFloat()
+        val mainColor = Color.parseColor(platform.accentHex)
+        val glowColor = Color.parseColor(platform.glowHex)
+
+        val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = mainColor
+            style = Paint.Style.FILL
+        }
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = glowColor
+            style = Paint.Style.STROKE
+            strokeWidth = s * 0.04f
+        }
+        canvas.drawCircle(s * 0.5f, s * 0.5f, s * 0.44f, circlePaint)
+        canvas.drawCircle(s * 0.5f, s * 0.5f, s * 0.44f, ringPaint)
+
+        val whitePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.FILL
+            textSize = s * 0.50f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+        }
+
+        when (platform) {
+            SocialPlatformIcon.FACEBOOK -> {
+                canvas.drawText("f", s * 0.52f, s * 0.68f, whitePaint)
+            }
+            SocialPlatformIcon.WHATSAPP -> {
+                val bubbleStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.STROKE
+                    strokeWidth = s * 0.065f
+                }
+                canvas.drawCircle(s * 0.50f, s * 0.50f, s * 0.24f, bubbleStroke)
+                canvas.drawCircle(s * 0.50f, s * 0.50f, s * 0.08f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.FILL
+                })
+            }
+            SocialPlatformIcon.TELEGRAM -> {
+                val plane = Path().apply {
+                    moveTo(s * 0.22f, s * 0.52f)
+                    lineTo(s * 0.76f, s * 0.28f)
+                    lineTo(s * 0.58f, s * 0.75f)
+                    lineTo(s * 0.46f, s * 0.56f)
+                    close()
+                }
+                canvas.drawPath(plane, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.FILL
+                })
+            }
+            SocialPlatformIcon.YOUTUBE -> {
+                val playTri = Path().apply {
+                    moveTo(s * 0.38f, s * 0.30f)
+                    lineTo(s * 0.70f, s * 0.50f)
+                    lineTo(s * 0.38f, s * 0.70f)
+                    close()
+                }
+                canvas.drawPath(playTri, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.FILL
+                })
+            }
+        }
+        return BitmapDrawable(resources, bmp)
+    }
+
     private fun createGlowingFeatureDrawable(feature: GlowingFeatureIcon, sizePx: Int = 78): Drawable {
         val bmp = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -304,17 +384,17 @@ class MainActivity : Activity() {
 
         val auraPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = glowColor
-            alpha = 65
+            alpha = 80
         }
         canvas.drawRoundRect(RectF(2f, 2f, s - 2f, s - 2f), s * 0.28f, s * 0.28f, auraPaint)
 
         val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#0D1830")
+            color = Color.parseColor("#181307")
         }
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = mainColor
             style = Paint.Style.STROKE
-            strokeWidth = s * 0.045f
+            strokeWidth = s * 0.05f
         }
         canvas.drawRoundRect(RectF(6f, 6f, s - 6f, s - 6f), s * 0.24f, s * 0.24f, bodyPaint)
         canvas.drawRoundRect(RectF(6f, 6f, s - 6f, s - 6f), s * 0.24f, s * 0.24f, borderPaint)
@@ -328,13 +408,13 @@ class MainActivity : Activity() {
             style = Paint.Style.FILL
         }
         val darkFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#091122")
+            color = Color.parseColor("#120E05")
             style = Paint.Style.FILL
         }
         val strokeFg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = glowColor
             style = Paint.Style.STROKE
-            strokeWidth = s * 0.045f
+            strokeWidth = s * 0.048f
             strokeCap = Paint.Cap.ROUND
         }
 
@@ -381,7 +461,7 @@ class MainActivity : Activity() {
                     lineTo(s * 0.64f, s * 0.40f)
                 }
                 val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.parseColor("#091122")
+                    color = Color.parseColor("#120E05")
                     style = Paint.Style.STROKE
                     strokeWidth = s * 0.06f
                     strokeCap = Paint.Cap.ROUND
@@ -405,7 +485,7 @@ class MainActivity : Activity() {
         val tint = Color.parseColor(category.accentHex)
         val s = sizePx.toFloat()
 
-        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#0E182D") }
+        val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#181307") }
         val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = tint
             style = Paint.Style.STROKE
@@ -423,11 +503,11 @@ class MainActivity : Activity() {
             style = Paint.Style.FILL
         }
         val darkFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#091122")
+            color = Color.parseColor("#120E05")
             style = Paint.Style.FILL
         }
         val tireStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#E2E8F0")
+            color = Color.parseColor("#FEF08A")
             style = Paint.Style.STROKE
             strokeWidth = s * 0.055f
         }
@@ -1366,8 +1446,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             text = tr("▶ Play", "▶ सुनें", "▶ শুনক")
             textSize = 12f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            background = make3dPill(accentGreen, accentGreenBright, 12f)
+            setTextColor(Color.BLACK)
+            background = make3dPill(accentGold, Color.parseColor("#FEF08A"), 12f)
             setPadding(16, 8, 16, 8)
             setOnClickListener {
                 applyTtsLanguageAndSoftVoice()
@@ -2047,7 +2127,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             textSize = 11f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            background = make3dPill(accentBlue, Color.parseColor("#60A5FA"), 12f)
+            background = make3dPill(accentBlue, accentGold, 12f)
             setPadding(12, 8, 12, 8)
             setOnClickListener {
                 Toast.makeText(ctx, "Admin Active • Target ID: $defaultRiderId", Toast.LENGTH_SHORT).show()
@@ -2077,7 +2157,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
-            background = make3dPill(cardElevated, Color.parseColor("#60A5FA"), 12f)
+            background = make3dPill(cardElevated, accentGold, 12f)
             setPadding(14, 6, 14, 6)
         }
 
@@ -2131,13 +2211,13 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             ).apply { bottomMargin = 12 }
         }
 
-        val totalCard = makeClickableMetricBox(ctx, "👥 Total Riders", totalRidersTv, "Tap List", Color.parseColor("#132854"), Color.parseColor("#3B82F6"), 6) {
+        val totalCard = makeClickableMetricBox(ctx, "👥 Total Riders", totalRidersTv, "Tap List", cardElevated, accentGold, 6) {
             openRidersListDialog(ctx, onlyOnline = false)
         }
-        val onlineCard = makeClickableMetricBox(ctx, "🟢 Online Riders", onlineRidersTv, "Tap Online", Color.parseColor("#0D3B26"), accentGreenBright, 6) {
+        val onlineCard = makeClickableMetricBox(ctx, "🟢 Online Riders", onlineRidersTv, "Tap Online", cardElevated, accentGold, 6) {
             openRidersListDialog(ctx, onlyOnline = true)
         }
-        val offlineCard = makeClickableMetricBox(ctx, "⚫ Offline Riders", offlineRidersTv, "Tap All", Color.parseColor("#3B1219"), Color.parseColor("#EF4444"), 0) {
+        val offlineCard = makeClickableMetricBox(ctx, "⚫ Offline Riders", offlineRidersTv, "Tap All", cardElevated, accentGold, 0) {
             openRidersListDialog(ctx, onlyOnline = false)
         }
 
@@ -2153,8 +2233,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = 14 }
         }
-        mid2Row.addView(makeMetricCard(ctx, "💰 Total Earning", "₹$totalEarnings", "Live", Color.parseColor("#2E1654"), Color.parseColor("#A855F7"), 6))
-        mid2Row.addView(makeMetricCard(ctx, "🏍️ Total Rides", "$totalRides", "Trips", Color.parseColor("#0D2E47"), Color.parseColor("#38BDF8"), 0))
+        mid2Row.addView(makeMetricCard(ctx, "💰 Total Earning", "₹$totalEarnings", "Live", cardElevated, accentGold, 6))
+        mid2Row.addView(makeMetricCard(ctx, "🏍️ Total Rides", "$totalRides", "Trips", cardElevated, accentGold, 0))
         col.addView(mid2Row)
 
         val summaryCard = makeCard(ctx, cardDark, borderSlate)
@@ -3476,10 +3556,10 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             text = if (isOn) "ON" else "OFF"
             textSize = 10f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(if (isOn) Color.WHITE else textMuted)
+            setTextColor(if (isOn) Color.BLACK else textMuted)
             background = make3dPill(
-                if (isOn) accentGreen else Color.parseColor("#1E293B"),
-                if (isOn) accentGreenBright else borderSlate,
+                if (isOn) accentGold else Color.parseColor("#241D0B"),
+                if (isOn) Color.parseColor("#FEF08A") else borderSlate,
                 10f
             )
             setPadding(10, 4, 10, 4)
@@ -3492,10 +3572,10 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 
     private fun updateStatusPillBadge(badge: TextView, isOn: Boolean) {
         badge.text = if (isOn) "ON" else "OFF"
-        badge.setTextColor(if (isOn) Color.WHITE else textMuted)
+        badge.setTextColor(if (isOn) Color.BLACK else textMuted)
         badge.background = make3dPill(
-            if (isOn) accentGreen else Color.parseColor("#1E293B"),
-            if (isOn) accentGreenBright else borderSlate,
+            if (isOn) accentGold else Color.parseColor("#241D0B"),
+            if (isOn) Color.parseColor("#FEF08A") else borderSlate,
             10f
         )
     }
@@ -3510,6 +3590,10 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         val fareLimitDef = prefs.getBoolean("fare_limit_on", true)
         val aiHelpDef = prefs.getBoolean("ai_help_on", true)
         val vehicleCat = VehicleCategory.fromKey(prefs.getString("rider_vehicle_type", "bike")) ?: VehicleCategory.BIKE
+
+        val totalRides = prefs.getInt("total_rides", 0)
+        val totalEarnings = prefs.getInt("total_earnings", 0)
+        val dailyTarget = prefs.getInt("daily_target_rs", 500)
 
         var isEngineActivated = false
         var isAutoAcceptEnabled = false
@@ -3531,8 +3615,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             text = "🛡️ ADMIN"
             textSize = 11f
             setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            background = make3dPill(cardElevated, Color.parseColor("#60A5FA"), 12f)
+            setTextColor(textWhite)
+            background = make3dPill(cardElevated, accentGold, 12f)
             setPadding(12, 8, 12, 8)
             setOnClickListener { promptAdminPassport(ctx, riderId) }
         }
@@ -3565,7 +3649,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             textSize = 18f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
-            background = make3dPill(cardElevated, Color.parseColor("#60A5FA"), 12f)
+            background = make3dPill(cardElevated, accentGold, 12f)
             setPadding(14, 6, 14, 6)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -3586,6 +3670,43 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         val homeScroll = ScrollView(ctx).apply { setPadding(18, 14, 18, 116) }
         val homeLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
+        // Classic Dark Gold Stats Strip
+        val statsStrip = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = make3dPill(cardElevated, accentGold, 14f)
+            setPadding(10, 10, 10, 10)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = 12 }
+        }
+        statsStrip.addView(TextView(ctx).apply {
+            text = "Today's Rides: $totalRides"
+            textSize = 11f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(textWhite)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        statsStrip.addView(TextView(ctx).apply {
+            text = "| Today's Earning: ₹$totalEarnings |"
+            textSize = 11f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(accentGold)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f)
+        })
+        statsStrip.addView(TextView(ctx).apply {
+            text = "Target: ₹$dailyTarget"
+            textSize = 11f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(textWhite)
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        homeLayout.addView(statsStrip)
+
         if (broadcastMessage.isNotBlank()) {
             val noticeCard = makeCard(ctx, cardElevated, accentGold)
             noticeCard.addView(TextView(ctx).apply {
@@ -3596,7 +3717,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             homeLayout.addView(noticeCard)
         }
 
-        val fleetCard = makeCard(ctx, cardDark, Color.parseColor("#3B82F6"))
+        val fleetCard = makeCard(ctx, cardDark, accentGold)
         val fleetRow = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -3614,7 +3735,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         fleetLeft.addView(TextView(ctx).apply {
             text = "Dibrugarh Fleet Dispatcher (${vehicleCat.label})"
             textSize = 12f
-            setTextColor(Color.parseColor("#60A5FA"))
+            setTextColor(accentGold)
             setPadding(0, 4, 0, 4)
         })
         val fleetStateTv = TextView(ctx).apply {
@@ -3702,11 +3823,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             val dOn = swDropLimit.isChecked
             val fOn = swFareLimit.isChecked
             rulesSummaryTv.text = if (shouldAcceptOrderDirectly(pOn, dOn, fOn)) {
-                tr(
-                    "⚡ All limits OFF: no distance or fare filter restriction.",
-                    "⚡ तीनों सीमाएँ OFF: दूरी या किराए की कोई रोक नहीं।",
-                    "⚡ সকলো সীমা OFF: দূৰত্ব বা ভাড়াৰ কোনো বাধা নাই।"
-                )
+                "Open Ride Mode • सभी दूरी/किराया सीमाएँ (Pickup, Drop, Fare) OFF"
             } else {
                 val pPart = if (pOn) "Pickup <= ${pKm}Km (ON)" else "Pickup $pKm (OFF)"
                 val dPart = if (dOn) "Drop <= ${dKm}Km (ON)" else "Drop $dKm (OFF)"
@@ -3719,17 +3836,29 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         swPickupLimit.setOnCheckedChangeListener { _, isChecked ->
             updateStatusPillBadge(badgePickup, isChecked)
             refreshRulesSummary()
-            speakSwitchState(ctx, swSoundTts.isChecked, tr("Pickup limit", "पिकअप सीमा", "পিকআপ সীমা"), isChecked)
+            if (isChecked) {
+                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा पिकअप ON")
+            } else {
+                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा पिकअप OFF")
+            }
         }
         swDropLimit.setOnCheckedChangeListener { _, isChecked ->
             updateStatusPillBadge(badgeDrop, isChecked)
             refreshRulesSummary()
-            speakSwitchState(ctx, swSoundTts.isChecked, tr("Drop limit", "ड्रॉप सीमा", "ড্ৰপ সীমা"), isChecked)
+            if (isChecked) {
+                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा ड्रॉप ON")
+            } else {
+                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा ड्रॉप OFF")
+            }
         }
         swFareLimit.setOnCheckedChangeListener { _, isChecked ->
             updateStatusPillBadge(badgeFare, isChecked)
             refreshRulesSummary()
-            speakSwitchState(ctx, swSoundTts.isChecked, tr("Fare limit", "किराया सीमा", "ভাড়া সীমা"), isChecked)
+            if (isChecked) {
+                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा किराया ON")
+            } else {
+                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा किराया OFF")
+            }
         }
         swAiHelp.setOnCheckedChangeListener { _, isChecked ->
             updateStatusPillBadge(badgeAiHelp, isChecked)
@@ -3790,7 +3919,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         val autoAcceptBtn = makeStyledButton(
             ctx,
             tr("⚡ AUTO ACCEPT\nOFF", "⚡ ऑटो एक्सेप्ट\nबंद", "⚡ অটো এক্সেপ্ট\nবন্ধ"),
-            Color.parseColor("#2A3954")
+            cardElevated
         ).apply {
             setOnClickListener {
                 if (!isEngineActivated) {
@@ -3804,13 +3933,13 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 isAutoAcceptEnabled = !isAutoAcceptEnabled
                 if (isAutoAcceptEnabled) {
                     text = tr("⚡ AUTO ACCEPT\nON", "⚡ ऑटो एक्सेप्ट\nचालू", "⚡ অটো এক্সেপ্ট\nচালু")
-                    background = make3dPill(accentGreen, accentGreenBright, 14f)
+                    background = make3dPill(accentGreen, accentGold, 14f)
                     fleetStateTv.text = tr("✅ Active • Auto Accept ON", "✅ सक्रिय • ऑटो एक्सेप्ट चालू", "✅ সক্ৰিয় • অটো এক্সেপ্ট চালু")
                     fleetStateTv.setTextColor(accentGreenBright)
                     speakSwitchState(ctx, swSoundTts.isChecked, tr("Auto accept", "ऑटो एक्सेप्ट", "অটো এক্সেপ্ট"), true)
                 } else {
                     text = tr("⚡ AUTO ACCEPT\nOFF", "⚡ ऑटो एक्सेप्ट\nबंद", "⚡ অটো এক্সেপ্ট\nবন্ধ")
-                    background = make3dPill(Color.parseColor("#2A3954"), borderSlate, 14f)
+                    background = make3dPill(cardElevated, accentGold, 14f)
                     fleetStateTv.text = tr("⏸️ Activated • Auto Accept OFF", "⏸️ एक्टिव • ऑटो एक्सेप्ट बंद", "⏸️ এক্টিভ • অটো এক্সেপ্ট বন্ধ")
                     fleetStateTv.setTextColor(accentGold)
                     speakSwitchState(ctx, swSoundTts.isChecked, tr("Auto accept", "ऑटो एक्सेप्ट", "অটো এক্সেপ্ট"), false)
@@ -3854,7 +3983,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                             isAutoAcceptEnabled = false
                             stopLocationLoop()
                             autoAcceptBtn.text = tr("⚡ AUTO ACCEPT\nOFF", "⚡ ऑटो एक्सेप्ट\nबंद", "⚡ অটো এক্সেপ্ট\nবন্ধ")
-                            autoAcceptBtn.background = make3dPill(Color.parseColor("#2A3954"), borderSlate, 14f)
+                            autoAcceptBtn.background = make3dPill(cardElevated, accentGold, 14f)
                             fleetStateTv.text = tr("⏸️ Standby (Deactivated)", "⏸️ स्टैंडबाय", "⏸️ ষ্টেণ্ডবাই")
                             fleetStateTv.setTextColor(Color.parseColor("#F87171"))
                             speakText(ctx, swSoundTts.isChecked, tr("Engine deactivated", "इंजन बंद हो गया है", "ইঞ্জিন বন্ধ হৈছে"))
@@ -3917,12 +4046,12 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 prefs.edit().putBoolean("parcel_mode_on", isParcelModeOn).apply()
                 if (isParcelModeOn) {
                     text = tr("📦 PARCEL: ON (Parcel Only)", "📦 पार्सल: ON (केवल पार्सल)", "📦 পাৰ্চেল: ON (কেৱল পাৰ্চেল)")
-                    background = make3dPill(accentGreen, accentGreenBright, 16f)
+                    background = make3dPill(accentGreen, accentGold, 16f)
                     speakSwitchState(ctx, swSoundTts.isChecked, tr("Parcel mode", "पार्सल मोड", "পাৰ্চেল মোড"), true)
                     Toast.makeText(ctx, tr("Parcel ON • Only Parcel Accepted", "पार्सल ON • केवल पार्सल एक्सेप्ट होगा", "পাৰ্চেল ON • কেৱল পাৰ্চেল গ্ৰহণ হ'ব"), Toast.LENGTH_SHORT).show()
                 } else {
                     text = tr("📦 PARCEL: OFF", "📦 पार्सल: OFF", "📦 পাৰ্চেল: OFF")
-                    background = make3dPill(accentPurple, Color.parseColor("#93C5FD"), 16f)
+                    background = make3dPill(accentPurple, accentGold, 16f)
                     speakSwitchState(ctx, swSoundTts.isChecked, tr("Parcel mode", "पार्सल मोड", "পাৰ্চেল মোড"), false)
                     Toast.makeText(ctx, tr("Parcel OFF", "पार्सल OFF", "পাৰ্চেল OFF"), Toast.LENGTH_SHORT).show()
                 }
@@ -3961,9 +4090,10 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = 12 }
         }
-        quickRuleRow.addView(makeStyledButton(
+
+        val openRideModeBtn = makeStyledButton(
             ctx,
-            tr("⚡ All Limits OFF", "⚡ सभी सीमाएँ OFF", "⚡ সকলো সীমা OFF"),
+            "⚡ Open Ride Mode",
             cardElevated
         ).apply {
             textSize = 11f
@@ -3974,9 +4104,21 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 swPickupLimit.isChecked = false
                 swDropLimit.isChecked = false
                 swFareLimit.isChecked = false
-                savePrefsAction()
+                refreshRulesSummary()
+                prefs.edit()
+                    .putBoolean("pickup_limit_on", false)
+                    .putBoolean("drop_limit_on", false)
+                    .putBoolean("fare_limit_on", false)
+                    .apply()
+                Toast.makeText(
+                    ctx,
+                    "Open Ride Mode • सभी दूरी/किराया सीमाएँ (Pickup, Drop, Fare) OFF",
+                    Toast.LENGTH_LONG
+                ).show()
+                speakText(ctx, swSoundTts.isChecked, "सभी दूरी/किराया सीमाएँ (Pickup, Drop, Fare) OFF")
             }
-        })
+        }
+        quickRuleRow.addView(openRideModeBtn)
 
         lateinit var aiHelpMicBtn: Button
         fun refreshAiButtonLabel() {
@@ -4157,8 +4299,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = 8 }
         }
-        rowA.addView(makeSmallSocialBtn(ctx, "facebook", fbUrl, 6))
-        rowA.addView(makeSmallSocialBtn(ctx, "whatsapp", waUrl, 0))
+        rowA.addView(makeSmallSocialBtn(ctx, "facebook", fbUrl, SocialPlatformIcon.FACEBOOK, 6))
+        rowA.addView(makeSmallSocialBtn(ctx, "whatsapp", waUrl, SocialPlatformIcon.WHATSAPP, 0))
         linksCard.addView(rowA)
 
         val rowB = LinearLayout(ctx).apply {
@@ -4168,25 +4310,39 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
         }
-        rowB.addView(makeSmallSocialBtn(ctx, "telegram", tgUrl.ifBlank { "https://t.me/captain_smart_pro" }, 6))
-        rowB.addView(makeSmallSocialBtn(ctx, "youtube", ytUrl, 0))
+        rowB.addView(makeSmallSocialBtn(ctx, "telegram", tgUrl.ifBlank { "https://t.me/captain_smart_pro" }, SocialPlatformIcon.TELEGRAM, 6))
+        rowB.addView(makeSmallSocialBtn(ctx, "youtube", ytUrl, SocialPlatformIcon.YOUTUBE, 0))
         linksCard.addView(rowB)
 
         return linksCard
     }
 
-    private fun makeSmallSocialBtn(ctx: Context, name: String, url: String, rightMarginPx: Int): Button {
+    private fun makeSmallSocialBtn(
+        ctx: Context,
+        name: String,
+        url: String,
+        iconType: SocialPlatformIcon,
+        rightMarginPx: Int
+    ): LinearLayout {
         val hasLink = url.isNotBlank()
-        return Button(ctx).apply {
-            text = if (hasLink) "$name • link" else "$name • not set"
-            textSize = 10f
-            isAllCaps = false
-            setTextColor(if (hasLink) textWhite else textMuted)
+        return LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             background = make3dPill(cardElevated, borderSlate, 10f)
-            setPadding(8, 10, 8, 10)
+            setPadding(10, 8, 10, 8)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 rightMargin = rightMarginPx
             }
+            addView(ImageView(ctx).apply {
+                setImageDrawable(createSocialIconDrawable(iconType))
+                layoutParams = LinearLayout.LayoutParams(36, 36).apply { rightMargin = 8 }
+            })
+            addView(TextView(ctx).apply {
+                text = if (hasLink) "$name • link" else "$name • not set"
+                textSize = 10f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(if (hasLink) textWhite else textMuted)
+            })
             setOnClickListener {
                 if (hasLink) {
                     try {
@@ -4324,7 +4480,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             textSize = 13f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            background = make3dPill(bgColor, Color.parseColor("#93C5FD"), 16f)
+            background = make3dPill(bgColor, accentGold, 16f)
             setPadding(16, 14, 16, 14)
         }
     }
