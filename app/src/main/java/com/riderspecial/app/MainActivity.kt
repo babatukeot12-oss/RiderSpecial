@@ -2,6 +2,8 @@ package com.riderspecial.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -46,6 +48,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -64,7 +67,8 @@ class MainActivity : Activity() {
         CAB("cab", "Cab", "#F59E0B"),
         E_RICKSHAW("e_rickshaw", "E-Rickshaw", "#FBBF24"),
         EV_SCOOTY("ev_scooty", "EV Scooty", "#FDE047"),
-        SCOOTY("scooty", "Scooty", "#D97706");
+        SCOOTY("scooty", "Scooty", "#D97706"),
+        GO_GO("go_go", "Go-Go", "#EAB308");
 
         companion object {
             fun fromKey(raw: String?): VehicleCategory? {
@@ -76,6 +80,7 @@ class MainActivity : Activity() {
                     "e_rickshaw", "erickshaw", "e_auto", "toto" -> E_RICKSHAW
                     "ev", "ev_scooty", "evscooty", "electric_scooty", "electric_scooter" -> EV_SCOOTY
                     "scooty", "scooter", "petrol_scooty" -> SCOOTY
+                    "go_go", "gogo" -> GO_GO
                     else -> null
                 }
             }
@@ -99,12 +104,14 @@ class MainActivity : Activity() {
         YOUTUBE("#EF4444", "#FCA5A5")
     }
 
+    private val currentAppVersionCode = 2
     private val adminPassport = "dinakeot1990"
     private var configurableTrialDays = 30L
 
     private var plan1MonthPrice = 49
     private var plan2MonthPrice = 70
     private var plan3MonthPrice = 99
+    private val dailyTargetRs = 2000
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
@@ -118,9 +125,17 @@ class MainActivity : Activity() {
     private var waUrl = ""
     private var tgUrl = "https://t.me/captain_smart_pro"
     private var ytUrl = ""
+    private var updateTelegramUrl = ""
+    private var updateWhatsappGroupUrl = ""
+
+    private var requiredMinVersionCode = 1
+    private var updateDeadlineMillis = 0L
+
     private var broadcastMessage = ""
-    private var customQrTitle = "Rider Payment QR"
+    private var customQrTitle = "SBI / Rider Payment QR"
     private var customQrBase64 = ""
+    private var sbiUpiId = "9954681428@sbi"
+    private var payeeName = "Dina Keot"
 
     private var updateEnabledFlag = false
     private var updateReleasedAtMillis = 0L
@@ -131,6 +146,7 @@ class MainActivity : Activity() {
     private val reqPickImage = 4091
     private val reqEngineLocationPerm = 4092
     private val reqAudioPerm = 4093
+    private var lastNotifiedMsgKey = ""
 
     private var latestLat: Double? = null
     private var latestLng: Double? = null
@@ -198,7 +214,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // Classic Dark Gold Palette
     private val bgDark = Color.parseColor("#070709")
     private val headerDark = Color.parseColor("#110E07")
     private val cardDark = Color.parseColor("#14110A")
@@ -218,6 +233,9 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
 
         val ctx: Context = this
+        createChatNotificationChannel(ctx)
+        startRiderMessageWatcher(ctx)
+
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         selectedLang = prefs.getString("app_lang", "EN") ?: "EN"
 
@@ -252,6 +270,112 @@ class MainActivity : Activity() {
         loadAndStart(ctx, hardwareId)
     }
 
+    private fun cleanRiderId(rawId: String): String {
+        val digitsOnly = rawId.replace(Regex("[^0-9]"), "")
+        return if (digitsOnly.length >= 10) digitsOnly.takeLast(10) else rawId.trim()
+    }
+
+    private fun createChatNotificationChannel(ctx: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "csp_rider_chat",
+                "Rider Chat Alerts",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts when a rider sends a message or photo"
+            }
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(channel)
+        }
+    }
+
+    private fun showRiderMessageNotification(ctx: Context, title: String, bodyText: String) {
+        try {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                android.app.Notification.Builder(ctx, "csp_rider_chat")
+            } else {
+                @Suppress("DEPRECATION")
+                android.app.Notification.Builder(ctx)
+            }
+            val notif = builder
+                .setSmallIcon(android.R.drawable.ic_dialog_email)
+                .setContentTitle(title)
+                .setContentText(bodyText)
+                .setAutoCancel(true)
+                .build()
+            nm.notify((System.currentTimeMillis() % 100000).toInt(), notif)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun startRiderMessageWatcher(ctx: Context) {
+        val startTime = System.currentTimeMillis()
+        try {
+            FirebaseDatabase.getInstance().reference
+                .child("captain_smart_pro")
+                .child("chats")
+                .addChildEventListener(object : ChildEventListener {
+                    override fun onChildAdded(riderSnap: DataSnapshot, previousChildName: String?) {
+                        attachSingleRiderChatListener(ctx, riderSnap.key ?: return, startTime)
+                    }
+                    override fun onChildChanged(riderSnap: DataSnapshot, previousChildName: String?) {
+                        attachSingleRiderChatListener(ctx, riderSnap.key ?: return, startTime)
+                    }
+                    override fun onChildRemoved(snapshot: DataSnapshot) {}
+                    override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+                    override fun onCancelled(error: DatabaseError) {}
+                })
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun attachSingleRiderChatListener(ctx: Context, riderId: String, startTime: Long) {
+        try {
+            FirebaseDatabase.getInstance().reference
+                .child("captain_smart_pro")
+                .child("chats")
+                .child(riderId)
+                .addChildEventListener(object : ChildEventListener {
+                    override fun onChildAdded(msgSnap: DataSnapshot, previousChildName: String?) {
+                        val key = msgSnap.key ?: return
+                        if (key == lastNotifiedMsgKey) return
+                        val sender = msgSnap.child("sender").getValue(String::class.java) ?: "Rider"
+                        if (sender.startsWith("Admin", ignoreCase = true)) return
+                        val msgTime = msgSnap.child("time").getValue(Long::class.java) ?: 0L
+                        if (msgTime < startTime - 3000L) return
+
+                        lastNotifiedMsgKey = key
+                        val message = msgSnap.child("message").getValue(String::class.java).orEmpty()
+                        val hasPhoto = !(msgSnap.child("photoB64").getValue(String::class.java).isNullOrBlank())
+                        val preview = when {
+                            message.isNotBlank() && hasPhoto -> "$message [Photo]"
+                            hasPhoto -> "Photo / Screenshot bheja hai"
+                            else -> message
+                        }
+                        showRiderMessageNotification(ctx, "Rider Message: $sender ($riderId)", preview)
+                        Toast.makeText(ctx, "$sender: $preview", Toast.LENGTH_LONG).show()
+                    }
+                    override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+                    override fun onChildRemoved(snapshot: DataSnapshot) {}
+                    override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+                    override fun onCancelled(error: DatabaseError) {}
+                })
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun launchUpiAppIntent(ctx: Context, amountRs: Int, planLabel: String, riderId: String) {
+        val safeAmt = amountRs.coerceAtLeast(1)
+        val uriStr = "upi://pay?pa=${Uri.encode(sbiUpiId)}&pn=${Uri.encode(payeeName)}&tn=${Uri.encode("CSP $planLabel $riderId")}&am=$safeAmt&cu=INR"
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriStr))
+        try {
+            ctx.startActivity(Intent.createChooser(intent, "Pay ₹$safeAmt via UPI App (PhonePe / GPay / Navi / SuperMoney)"))
+        } catch (_: Exception) {
+            Toast.makeText(ctx, "No UPI app found. Pay ₹$safeAmt to $sbiUpiId or scan QR.", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun tr(en: String, hi: String, asText: String): String {
         return when (selectedLang) {
             "HI" -> hi
@@ -281,26 +405,56 @@ class MainActivity : Activity() {
     private fun handleRiderAppNewUpdateClick(ctx: Context, soundEnabled: Boolean) {
         if (!isNewUpdateReadyNow()) {
             val statusMsg = getUpdateRemainingHoursText()
-            Toast.makeText(
-                ctx,
-                "$statusMsg • आपका मौजूदा ऐप सामान्य रूप से चलता रहेगा।",
-                Toast.LENGTH_LONG
-            ).show()
+            Toast.makeText(ctx, "$statusMsg • आपका मौजूदा ऐप सामान्य रूप से चलता रहेगा।", Toast.LENGTH_LONG).show()
             speakText(ctx, soundEnabled, "अभी कोई नया ऐप अपडेट उपलब्ध नहीं है। आपका ऐप सामान्य रूप से चल रहा है।")
             return
         }
+        showUpdateDownloadLinksDialog(ctx)
+    }
 
-        val targetLink = tgUrl.trim().ifEmpty { "https://t.me/captain_smart_pro" }
-        Toast.makeText(
-            ctx,
-            "नया अपडेट उपलब्ध है! Telegram चैनल खोला जा रहा है...",
-            Toast.LENGTH_SHORT
-        ).show()
-        try {
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(targetLink)))
-        } catch (_: Exception) {
-            Toast.makeText(ctx, targetLink, Toast.LENGTH_LONG).show()
+    private fun showUpdateDownloadLinksDialog(ctx: Context) {
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 22, 28, 20)
         }
+        box.addView(TextView(ctx).apply {
+            text = tr(
+                "Choose Telegram or WhatsApp Group to download the update:",
+                "अपडेट डाउनलोड करने के लिए Telegram या WhatsApp Group चुनें:",
+                "আপডেট ডাউনলোড কৰিবলৈ Telegram বা WhatsApp Group বাছনি কৰক:"
+            )
+            textSize = 13f
+            setPadding(0, 0, 0, 12)
+        })
+        box.addView(Button(ctx).apply {
+            text = "✈️ Download via Telegram"
+            setOnClickListener {
+                val link = updateTelegramUrl.ifBlank { tgUrl }
+                if (link.isNotBlank()) {
+                    try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
+                    catch (_: Exception) { Toast.makeText(ctx, "Invalid Telegram link", Toast.LENGTH_SHORT).show() }
+                } else {
+                    Toast.makeText(ctx, "Telegram link not set", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+        box.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
+        box.addView(Button(ctx).apply {
+            text = "💬 Join WhatsApp Group & Download"
+            setOnClickListener {
+                if (updateWhatsappGroupUrl.isNotBlank()) {
+                    try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(updateWhatsappGroupUrl))) }
+                    catch (_: Exception) { Toast.makeText(ctx, "Invalid WhatsApp Group link", Toast.LENGTH_SHORT).show() }
+                } else {
+                    Toast.makeText(ctx, "WhatsApp Group link not set", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+        AlertDialog.Builder(ctx)
+            .setTitle("⬆️ App Update")
+            .setView(box)
+            .setNegativeButton(tr("Close", "बंद करें", "বন্ধ কৰক"), null)
+            .show()
     }
 
     private fun createSocialIconDrawable(platform: SocialPlatformIcon, sizePx: Int = 54): Drawable {
@@ -331,9 +485,7 @@ class MainActivity : Activity() {
         }
 
         when (platform) {
-            SocialPlatformIcon.FACEBOOK -> {
-                canvas.drawText("f", s * 0.52f, s * 0.68f, whitePaint)
-            }
+            SocialPlatformIcon.FACEBOOK -> canvas.drawText("f", s * 0.52f, s * 0.68f, whitePaint)
             SocialPlatformIcon.WHATSAPP -> {
                 val bubbleStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = Color.WHITE
@@ -388,9 +540,7 @@ class MainActivity : Activity() {
         }
         canvas.drawRoundRect(RectF(2f, 2f, s - 2f, s - 2f), s * 0.28f, s * 0.28f, auraPaint)
 
-        val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#181307")
-        }
+        val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#181307") }
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = mainColor
             style = Paint.Style.STROKE
@@ -560,7 +710,7 @@ class MainActivity : Activity() {
                 canvas.drawRoundRect(RectF(s * 0.59f, s * 0.36f, s * 0.72f, s * 0.50f), 6f, 6f, whiteFill)
                 canvas.drawCircle(s * 0.81f, s * 0.55f, s * 0.04f, whiteFill)
             }
-            VehicleCategory.CAB -> {
+            VehicleCategory.CAB, VehicleCategory.GO_GO -> {
                 canvas.drawRoundRect(RectF(s * 0.41f, s * 0.22f, s * 0.59f, s * 0.29f), 4f, 4f, goldPaint)
                 val roof = Path().apply {
                     moveTo(s * 0.27f, s * 0.47f)
@@ -587,16 +737,6 @@ class MainActivity : Activity() {
                 canvas.drawRoundRect(RectF(s * 0.71f, s * 0.66f, s * 0.79f, s * 0.81f), 4f, 4f, whiteFill)
                 canvas.drawRoundRect(RectF(s * 0.45f, s * 0.63f, s * 0.55f, s * 0.84f), 5f, 5f, whiteFill)
                 canvas.drawCircle(s * 0.50f, s * 0.52f, s * 0.055f, goldPaint)
-                val bolt = Path().apply {
-                    moveTo(s * 0.52f, s * 0.11f)
-                    lineTo(s * 0.46f, s * 0.17f)
-                    lineTo(s * 0.51f, s * 0.17f)
-                    lineTo(s * 0.48f, s * 0.23f)
-                    lineTo(s * 0.55f, s * 0.16f)
-                    lineTo(s * 0.50f, s * 0.16f)
-                    close()
-                }
-                canvas.drawPath(bolt, goldPaint)
             }
             VehicleCategory.EV_SCOOTY -> {
                 canvas.drawLine(s * 0.34f, s * 0.29f, s * 0.27f, s * 0.21f, tireStroke)
@@ -614,16 +754,6 @@ class MainActivity : Activity() {
                 }
                 canvas.drawPath(apron, bodyPaint)
                 canvas.drawRoundRect(RectF(s * 0.45f, s * 0.63f, s * 0.55f, s * 0.84f), 6f, 6f, whiteFill)
-                val bolt = Path().apply {
-                    moveTo(s * 0.53f, s * 0.41f)
-                    lineTo(s * 0.44f, s * 0.52f)
-                    lineTo(s * 0.51f, s * 0.52f)
-                    lineTo(s * 0.47f, s * 0.63f)
-                    lineTo(s * 0.57f, s * 0.50f)
-                    lineTo(s * 0.50f, s * 0.50f)
-                    close()
-                }
-                canvas.drawPath(bolt, goldPaint)
             }
             VehicleCategory.SCOOTY -> {
                 canvas.drawCircle(s * 0.26f, s * 0.71f, s * 0.12f, tireStroke)
@@ -761,11 +891,7 @@ class MainActivity : Activity() {
 
         val remaining = getAiQuestionsRemainingToday(ctx, riderId)
         if (remaining <= 0) {
-            speakText(
-                ctx,
-                true,
-                "आपका आज का तीन सवाल पूरा हुआ। आप कल से फिर से ट्राई करिए।"
-            )
+            speakText(ctx, true, "आपका आज का तीन सवाल पूरा हुआ। आप कल से फिर से ट्राई करिए।")
             return
         }
 
@@ -781,9 +907,7 @@ class MainActivity : Activity() {
             ctx,
             true,
             "कैप्टन स्मार्ट प्रो में आपको मैं किस तरह से मदद कर सकता हूं?",
-            onDone = {
-                startSilentHindiVoiceListener(ctx, riderId, aiSwitchOn, soundEnabled, onQuotaChanged)
-            }
+            onDone = { startSilentHindiVoiceListener(ctx, riderId, aiSwitchOn, soundEnabled, onQuotaChanged) }
         )
     }
 
@@ -1107,6 +1231,8 @@ class MainActivity : Activity() {
             if (coords != null) {
                 riderMap["lat"] = coords.first
                 riderMap["lng"] = coords.second
+                riderMap["lastLat"] = coords.first
+                riderMap["lastLng"] = coords.second
                 riderMap["locationUpdatedAt"] = nowMillis
             }
             rootRef.child("riders").child(riderId).updateChildren(riderMap)
@@ -1206,14 +1332,15 @@ class MainActivity : Activity() {
     }
 
     private fun deleteRiderFromAdmin(ctx: Context, targetRiderId: String, onDone: () -> Unit) {
+        val cleanId = cleanRiderId(targetRiderId)
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         prefs.edit()
-            .remove("trial_start_$targetRiderId")
-            .remove("active_until_$targetRiderId")
-            .remove("blocked_$targetRiderId")
-            .remove("local_chat_$targetRiderId")
+            .remove("trial_start_$cleanId")
+            .remove("active_until_$cleanId")
+            .remove("blocked_$cleanId")
+            .remove("local_chat_$cleanId")
             .apply()
-        if ((prefs.getString("rider_mobile_id", "")?.trim() ?: "") == targetRiderId) {
+        if (cleanRiderId(prefs.getString("rider_mobile_id", "") ?: "") == cleanId) {
             prefs.edit()
                 .remove("rider_full_name")
                 .remove("rider_mobile_id")
@@ -1223,13 +1350,13 @@ class MainActivity : Activity() {
         }
         try {
             val root = FirebaseDatabase.getInstance().reference.child("captain_smart_pro")
-            root.child("riders").child(targetRiderId).removeValue()
-            root.child("payment_requests").child(targetRiderId).removeValue()
+            root.child("riders").child(cleanId).removeValue()
+            root.child("payment_requests").child(cleanId).removeValue()
         } catch (_: Exception) {
         }
         Toast.makeText(
             ctx,
-            "Rider $targetRiderId deleted. Can create fresh account with same number.",
+            "Rider $cleanId deleted. Can create fresh account with same number.",
             Toast.LENGTH_LONG
         ).show()
         onDone()
@@ -1238,7 +1365,7 @@ class MainActivity : Activity() {
     private fun resetLocalLoginForFreshAccount(ctx: Context, hardwareId: String) {
         stopLocationLoop()
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
-        val prevRiderId = prefs.getString("rider_mobile_id", "")?.trim().orEmpty()
+        val prevRiderId = cleanRiderId(prefs.getString("rider_mobile_id", "") ?: "")
         prefs.edit()
             .remove("rider_full_name")
             .remove("rider_mobile_id")
@@ -1342,7 +1469,7 @@ class MainActivity : Activity() {
 Captain Smart Pro — Companion for Every Rider
 
 Dear Rider Brothers,
-Respect and salutation to every captain working hard across weather, traffic, and daily challenges to support family and dreams. Captain Smart Pro is designed to make your daily work smooth, clear, and organized—whether you ride Bike, Auto, Cab, E-Rickshaw, EV Scooty, or Scooty.
+Respect and salutation to every captain working hard across weather, traffic, and daily challenges to support family and dreams. Captain Smart Pro is designed to make your daily work smooth, clear, and organized—whether you ride Bike, Auto, Cab, E-Rickshaw, EV Scooty, Scooty, or Go-Go.
 
 1. How Rules Work (Pickup, Drop, Fare & Auto Accept)
 • Pickup Distance (Km), Drop Distance (Km), and Ride Amount / Fare (₹) each have their editable value box and On/Off switch right alongside.
@@ -1358,18 +1485,13 @@ Respect and salutation to every captain working hard across weather, traffic, an
 5) Share Live Location: Tap SHARE LIVE LOCATION to share your current location link and status with family or friends via WhatsApp or other apps.
 6) AI Voice Help (3 Questions / 24h): Turn ON the AI Help switch and tap AI HELP (with Mic permission) to ask up to 3 voice questions in Hindi every 24 hours.
 
-3. Language, Listen Button & Support (Live Chat, Photo & Recording)
-• Choose English, हिन्दी, or অসমীয়া from ⋮ > Language; this About guide updates in your chosen language.
-• Tap the Play button at the top-right corner of About to listen to this guide.
-• Use Live Chat to send messages, photos, and voice/recordings to Admin; Admin will call or message when needed.
-
 Keep moving forward and stay safe—your hard work is your biggest strength.
             """.trimIndent(),
             hi = """
 Captain Smart Pro — राइडर भाइयों का अपना साथी
 
 प्यारे राइडर भाइयों,
-सड़क पर हर मौसम, हर ट्रैफ़िक और हर चुनौती के बीच मेहनत करके अपने परिवार और सपनों को आगे बढ़ाने वाले हर कप्तान को दिल से सलाम। Captain Smart Pro इसी सोच के साथ बनाया गया है कि आपके रोज़ के काम को आसान, साफ़ और व्यवस्थित बनाया जाए। चाहे आप Bike, Auto, Cab, E-Rickshaw, EV Scooty या Scooty चलाते हों—सही नियम और सही आदतों से काम करना हमेशा फ़ायदेमंद होता है।
+सड़क पर हर मौसम, हर ट्रैफ़िक और हर चुनौती के बीच मेहनत करके अपने परिवार और सपनों को आगे बढ़ाने वाले हर कप्तान को दिल से सलाम। Captain Smart Pro इसी सोच के साथ बनाया गया है कि आपके रोज़ के काम को आसान, साफ़ और व्यवस्थित बनाया जाए। चाहे आप Bike, Auto, Cab, E-Rickshaw, EV Scooty, Scooty या Go-Go चलाते हों—सही नियम और सही आदतों से काम करना हमेशा फ़ायदेमंद होता है।
 
 1. नियम कैसे काम करते हैं? (Pickup, Drop, Fare और Auto Accept)
 • Pickup Distance (Km), Drop Distance (Km) और Ride Amount / Fare (₹)—हर एक के साथ उसी लाइन में बदलने लायक मान (Km/₹) और On/Off स्विच दिया गया है।
@@ -1383,12 +1505,7 @@ Captain Smart Pro — राइडर भाइयों का अपना स
 3) इंजन, लोकेशन और एक्सेसिबिलिटी: ऊपर ⋮ मेनू से Activate Engine दबाएं। फ़ोन में Location (GPS) और Accessibility Settings चालू रखें। Accessibility Settings ऑन रहना ज़रूरी है ताकि स्क्रीनशॉट क्लिक हो और गैलरी में सेव हो सके।
 4) आवाज़ (TTS) की सूचना: बटन या स्विच On/Off करने पर आवाज़ में सूचना मिलती है (फ़ोन की मीडिया आवाज़ चालू रखें)।
 5) लाइव लोकेशन शेयर करना: SHARE LIVE LOCATION दबाकर अपनी ताज़ा लोकेशन का लिंक और स्थिति WhatsApp या अन्य ऐप से घर, परिवार या दोस्त को भेजें।
-6) AI वॉइस मदद (24 घंटे में 3 सवाल): AI Help स्विच चालू रखें और AI HELP दबाकर (माइक अनुमति ऑन करके) 24 घंटे में 3 बार हिन्दी में बोलकर सवाल पूछें और अगले दिन फिर से 3 सवाल पूछ सकें।
-
-3. भाषा, सुनने का बटन और सहायता (Live Chat, फ़ोटो और रिकॉर्डिंग)
-• ⋮ मेनू से Language चुनकर English, हिन्दी या অসমীয়া में ऐप और About पढ़ सकते हैं।
-• About खुलने पर ऊपर दाएँ कोने में दिए गए Play बटन पर क्लिक करके इस लिखे हुए हिस्से को सुन सकते हैं।
-• किसी भी मदद के लिए Live Chat के ज़रिए एडमिन से मैसेज, फ़ोटो और रिकॉर्डिंग/आवाज़ भेजें—ज़रूरत पड़ने पर एडमिन से कॉल या मैसेज के ज़रिए संपर्क किया जाएगा।
+6) AI वॉइस मदद (24 घंटे में 3 सवाल): AI Help स्विच चालू रखें और AI HELP दबाकर (माइक अनुमति ऑन करके) 24 घंटे में 3 बार हिन्दी में बोलकर सवाल पूछें।
 
 आगे बढ़ते रहिए, सुरक्षित रहिए—आपकी मेहनत ही आपकी सबसे बड़ी ताकत है।
             """.trimIndent(),
@@ -1396,7 +1513,7 @@ Captain Smart Pro — राइडर भाइयों का अपना स
 Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন সংগী
 
 মৰমৰ ৰাইডাৰ ভাইসকল,
-পৰিয়াল আৰু সপোন আগবঢ়াই নিবলৈ ৰ'দ-বৰষুণ, যান-জঁট আৰু প্ৰত্যাহ্বানৰ মাজত পৰিশ্ৰম কৰা প্ৰতিগৰাকী কেপ্টেইনলৈ আন্তৰিক শ্ৰদ্ধা। Bike, Auto, Cab, E-Rickshaw, EV Scooty বা Scooty যিয়েই নচলাওক—সঠিক নিয়ম আৰু অভ্যাসে কাম সহজ আৰু সুশৃংখল কৰে।
+পৰিয়াল আৰু সপোন আগবঢ়াই নিবলৈ ৰ'দ-বৰষুণ, যান-জঁট আৰু প্ৰত্যাহ্বানৰ মাজত পৰিশ্ৰম কৰা প্ৰতিগৰাকী কেপ্টেইনলৈ আন্তৰিক শ্ৰদ্ধা। Bike, Auto, Cab, E-Rickshaw, EV Scooty, Scooty বা Go-Go যিয়েই নচলাওক—সঠিক নিয়ম আৰু অভ্যাসে কাম সহজ আৰু সুশৃংখল কৰে।
 
 ১. নিয়ম কেনেকৈ চলে? (Pickup, Drop, Fare আৰু Auto Accept)
 • Pickup Distance (Km), Drop Distance (Km) আৰু Ride Amount / Fare (₹)—প্ৰতিটোৰ লগতে মান সলনি কৰিব পৰা বক্স আৰু On/Off চুইচ আছে।
@@ -1407,15 +1524,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 ২. এপ কেনেকৈ চলাব?
 ১) প্ৰফাইল আৰু বাহন: নাম, মোবাইল নম্বৰ আৰু বাহনৰ আইকন বাছনি কৰক।
 ২) নিয়ম আৰু পাৰ্চেল মোড: মান সলনি কৰি Pickup, Drop আৰু Fare চুইচ ছেট কৰক; পাৰ্চেলৰ বাবে PARCEL: ON ব্যৱহাৰ কৰক।
-৩) ইঞ্জিন, লোকেচন আৰু এক্সেচিবিলিটি: ওপৰৰ ⋮ মেনুৰ পৰা Activate Engine টিপক। Location (GPS) আৰু Accessibility Settings ON ৰাখক—স্ক্ৰীণশ্বট লৈ গেলাৰীত ছেভ হ'বলৈ Accessibility Settings ON থকাটো প্ৰয়োজন।
-৪) আৱাজ (TTS): চুইচ/বুটাম On/Off কৰিলে আৱাজ শুনা যায় (Media Volume অন ৰাখক)।
-৫) লাইভ লোকেচন শ্বেয়াৰ: SHARE LIVE LOCATION টিপি পৰিয়াল বা বন্ধুক লোকেচন লিংক পঠিয়াব পাৰে।
-৬) AI সহায়: AI Help চুইচ ON ৰাখি মাইক অনুমতি অন কৰি ২৪ ঘণ্টাত ৩ বাৰ হিন্দীত প্ৰশ্ন সুধিব পাৰিব।
-
-৩. ভাষা, Play বুটাম আৰু সহায়
-• ⋮ > Language ৰ পৰা English, हिन्दी বা অসমীয়া বাছনি কৰক।
-• About খোলাৰ পাছত ওপৰৰ সোঁ কোণৰ Play বুটাম টিপি এই লেখা শুনিব পাৰে।
-• Live Chat যোগে বাৰ্তা, ফটো আৰু ৰেকৰ্ডিং পঠিয়াব পাৰে; প্ৰয়োজনত এডমিনে কল বা মেছেজ কৰিব।
+৩) ইঞ্জিন, লোকেচন আৰু এক্সেচিবিলিটি: ওপৰৰ ⋮ মেনুৰ পৰা Activate Engine টিপক। Location (GPS) আৰু Accessibility Settings ON ৰাখক।
 
 আগবাঢ়ি যাওক, সুৰক্ষিত থাকক—আপোনাৰ পৰিশ্ৰমেই আটাইতকৈ ডাঙৰ শক্তি।
             """.trimIndent()
@@ -1471,10 +1580,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         AlertDialog.Builder(ctx)
             .setView(scroll)
             .setOnDismissListener {
-                try {
-                    tts?.stop()
-                } catch (_: Exception) {
-                }
+                try { tts?.stop() } catch (_: Exception) {}
             }
             .setNegativeButton(tr("Close", "बंद करें", "বন্ধ কৰক"), null)
             .show()
@@ -1566,6 +1672,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         }
     }
 
+    // Zoom removed to avoid app crash; Download to Gallery only
     private fun openLargePhotoDialog(ctx: Context, bmp: Bitmap, title: String) {
         try {
             val screenW = ctx.resources.displayMetrics.widthPixels
@@ -1628,16 +1735,32 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         waUrl = prefs.getString("social_wa", "") ?: ""
         tgUrl = prefs.getString("social_tg", "https://t.me/captain_smart_pro") ?: "https://t.me/captain_smart_pro"
         ytUrl = prefs.getString("social_yt", "") ?: ""
+        updateTelegramUrl = prefs.getString("upd_tg_url", "") ?: ""
+        updateWhatsappGroupUrl = prefs.getString("upd_wa_group_url", "") ?: ""
+        requiredMinVersionCode = prefs.getInt("req_min_ver", 1)
+        updateDeadlineMillis = prefs.getLong("upd_deadline", 0L)
+
         broadcastMessage = prefs.getString("broadcast_msg", "") ?: ""
-        customQrTitle = prefs.getString("custom_qr_title", "Rider Payment QR") ?: "Rider Payment QR"
+        customQrTitle = prefs.getString("custom_qr_title", "SBI / Rider Payment QR") ?: "SBI / Rider Payment QR"
         customQrBase64 = prefs.getString("custom_qr_b64", "") ?: ""
+        sbiUpiId = prefs.getString("sbi_upi_id", "9954681428@sbi") ?: "9954681428@sbi"
 
         updateEnabledFlag = prefs.getBoolean("app_update_enabled", false)
         updateReleasedAtMillis = prefs.getLong("app_update_released_at", 0L)
         updateDelayHours = prefs.getLong("app_update_delay_hours", 24L).coerceAtLeast(0L)
 
+        val lastInstalledVer = prefs.getInt("last_installed_ver", 0)
+        if (lastInstalledVer > 0 && lastInstalledVer < currentAppVersionCode) {
+            Toast.makeText(
+                ctx,
+                if (selectedLang == "HI") "आपका ऐप अपडेट हो चुका है!" else "Your app has been updated!",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        prefs.edit().putInt("last_installed_ver", currentAppVersionCode).apply()
+
         val riderName = prefs.getString("rider_full_name", "") ?: ""
-        val riderMobile = prefs.getString("rider_mobile_id", "") ?: ""
+        val riderMobile = cleanRiderId(prefs.getString("rider_mobile_id", "") ?: "")
         val riderVehicleKey = prefs.getString("rider_vehicle_type", "") ?: ""
         val riderPhotoB64 = prefs.getString("rider_photo_b64", "") ?: ""
 
@@ -1646,7 +1769,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             return
         }
 
-        val riderId = riderMobile.trim()
+        val riderId = riderMobile
         val isBlocked = prefs.getBoolean("blocked_$riderId", false)
         if (isBlocked) {
             showBlockedScreen(ctx, riderId, riderName)
@@ -1700,9 +1823,15 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 val dbTg = snap.child("telegram").getValue(String::class.java)
                 if (!dbTg.isNullOrBlank()) tgUrl = dbTg
                 ytUrl = snap.child("youtube").getValue(String::class.java) ?: ytUrl
+                updateTelegramUrl = snap.child("updTgUrl").getValue(String::class.java) ?: updateTelegramUrl
+                updateWhatsappGroupUrl = snap.child("updWaGroupUrl").getValue(String::class.java) ?: updateWhatsappGroupUrl
+                requiredMinVersionCode = snap.child("reqMinVer").getValue(Int::class.java) ?: requiredMinVersionCode
+                updateDeadlineMillis = snap.child("updDeadline").getValue(Long::class.java) ?: updateDeadlineMillis
+
                 broadcastMessage = snap.child("broadcast").getValue(String::class.java) ?: broadcastMessage
                 customQrTitle = snap.child("qrTitle").getValue(String::class.java) ?: customQrTitle
                 customQrBase64 = snap.child("qrBase64").getValue(String::class.java) ?: customQrBase64
+                sbiUpiId = snap.child("sbiUpiId").getValue(String::class.java) ?: sbiUpiId
 
                 val dbUpdEnabled = snap.child("updateEnabled").getValue(Boolean::class.java)
                 if (dbUpdEnabled != null) updateEnabledFlag = dbUpdEnabled
@@ -1719,15 +1848,27 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     .putString("social_wa", waUrl)
                     .putString("social_tg", tgUrl)
                     .putString("social_yt", ytUrl)
+                    .putString("upd_tg_url", updateTelegramUrl)
+                    .putString("upd_wa_group_url", updateWhatsappGroupUrl)
+                    .putInt("req_min_ver", requiredMinVersionCode)
+                    .putLong("upd_deadline", updateDeadlineMillis)
                     .putString("broadcast_msg", broadcastMessage)
                     .putString("custom_qr_title", customQrTitle)
                     .putString("custom_qr_b64", customQrBase64)
+                    .putString("sbi_upi_id", sbiUpiId)
                     .putBoolean("app_update_enabled", updateEnabledFlag)
                     .putLong("app_update_released_at", updateReleasedAtMillis)
                     .putLong("app_update_delay_hours", updateDelayHours)
                     .apply()
             }
         } catch (_: Exception) {
+        }
+
+        val forceUpdateDue = currentAppVersionCode < requiredMinVersionCode &&
+            (updateDeadlineMillis <= 0L || nowMillis >= updateDeadlineMillis)
+        if (forceUpdateDue) {
+            showUpdateDownloadLinksDialog(ctx)
+            return
         }
 
         if (!hasActiveSub && !inTrial) {
@@ -1814,20 +1955,12 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             setOnClickListener {
                 val msg = reqEt.text.toString().trim()
                 if (msg.isEmpty()) {
-                    Toast.makeText(
-                        ctx,
-                        tr("Please write your message first", "कृपया पहले अपनी समस्या लिखें", "অনুগ্ৰহ কৰি প্ৰথমে আপোনাৰ সমস্যা লিখক"),
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(ctx, tr("Please write your message first", "कृपया पहले अपनी समस्या लिखें", "অনুগ্ৰহ কৰি প্ৰথমে আপোনাৰ সমস্যা লিখক"), Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 val words = countWords(msg)
                 if (words > 200) {
-                    Toast.makeText(
-                        ctx,
-                        tr("Please keep within 200 words ($words words)", "कृपया 200 शब्दों के अंदर लिखें ($words शब्द)", "অনুগ্ৰহ কৰি ২০০ শব্দৰ ভিতৰত লিখক ($words শব্দ)"),
-                        Toast.LENGTH_LONG
-                    ).show()
+                    Toast.makeText(ctx, tr("Please keep within 200 words ($words words)", "कृपया 200 शब्दों के अंदर लिखें ($words शब्द)", "অনুগ্ৰহ কৰি ২০০ শব্দৰ ভিতৰত লিখক ($words শব্দ)"), Toast.LENGTH_LONG).show()
                     return@setOnClickListener
                 }
 
@@ -1863,11 +1996,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 }
 
                 reqEt.setText("")
-                Toast.makeText(
-                    ctx,
-                    tr("Request sent to Admin", "आपकी रिक्वेस्ट एडमिन को भेज दी गई है", "আপোনাৰ অনুৰোধ এডমিনলৈ পঠিওৱা হৈছে"),
-                    Toast.LENGTH_LONG
-                ).show()
+                Toast.makeText(ctx, tr("Request sent to Admin", "आपकी रिक्वेस्ट एडमिन को भेज दी गई है", "আপোনাৰ অনুৰোধ এডমিনলৈ পঠিওৱা হৈছে"), Toast.LENGTH_LONG).show()
             }
         }
 
@@ -1969,8 +2098,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 
         val allVehicles = VehicleCategory.entries
         val rows = listOf(
-            allVehicles.take(3),
-            allVehicles.drop(3)
+            allVehicles.take(4),
+            allVehicles.drop(4)
         )
 
         rows.forEach { rowItems ->
@@ -1985,17 +2114,17 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 val tile = LinearLayout(ctx).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER
-                    setPadding(6, 10, 6, 10)
+                    setPadding(4, 10, 4, 10)
                     layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                         if (idx > 0) leftMargin = 6
                     }
                     addView(ImageView(ctx).apply {
                         setImageDrawable(createVehicleIconDrawable(vType))
-                        layoutParams = LinearLayout.LayoutParams(64, 64)
+                        layoutParams = LinearLayout.LayoutParams(56, 56)
                     })
                     addView(TextView(ctx).apply {
                         text = vType.label
-                        textSize = 11f
+                        textSize = 10f
                         setTypeface(null, Typeface.BOLD)
                         setTextColor(textWhite)
                         gravity = Gravity.CENTER
@@ -2047,7 +2176,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         ).apply {
             setOnClickListener {
                 val fullName = nameEt.text.toString().trim()
-                val mobileId = mobileEt.text.toString().trim()
+                val mobileId = cleanRiderId(mobileEt.text.toString().trim())
                 val chosenVehicle = selectedVehicle
                 if (fullName.isEmpty() || mobileId.length < 10) {
                     Toast.makeText(ctx, "Enter Full Name and valid Mobile Number", Toast.LENGTH_LONG).show()
@@ -2090,13 +2219,9 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             .setView(passEt)
             .setPositiveButton("Unlock") { _, _ ->
                 if (passEt.text.toString() == adminPassport) {
-                    showAdminDashboardScreen(ctx, targetRiderId)
+                    showAdminDashboardScreen(ctx, cleanRiderId(targetRiderId))
                 } else {
-                    Toast.makeText(
-                        ctx,
-                        tr("Invalid Passport", "गलत पासवर्ड", "ভুল পাছৱৰ্ড"),
-                        Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(ctx, tr("Invalid Passport", "गलत पासवर्ड", "ভুল পাছৱৰ্ড"), Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Cancel", null)
@@ -2173,14 +2298,14 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         val col = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
         val totalRidersTv = TextView(ctx).apply {
-            text = "1"
+            text = "0"
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
             gravity = Gravity.CENTER
         }
         val onlineRidersTv = TextView(ctx).apply {
-            text = "1"
+            text = "0"
             textSize = 16f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -2317,7 +2442,6 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                         onlineRidersTv.text = onlineCount.toString()
                         offlineRidersTv.text = offlineCount.toString()
                     }
-
                     override fun onCancelled(error: DatabaseError) {}
                 })
 
@@ -2340,7 +2464,6 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                             "🔔 Payment Alert (${pendingList.size}): ${pendingList.joinToString(", ")} — Open ⋮ > 💳 Subscription"
                         }
                     }
-
                     override fun onCancelled(error: DatabaseError) {}
                 })
         } catch (_: Exception) {
@@ -2348,9 +2471,9 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         }
 
         val mSub = "💳 Subscription (Days +/-)"
-        val mPlans = "🏷️ Plan Prices (1M/2M/3M)"
+        val mPlans = "🏷️ Plan Prices & SBI UPI"
         val mTrial = "⏳ Free Trial Days"
-        val mUpdateCtrl = "🔄 App Update Control (24h / OFF / ON)"
+        val mUpdateCtrl = "🔄 App Update Control & Links (TG/WA Group)"
         val mChat = "💬 Rider Chat & Voice Listen"
         val mBlock = "🛡️ Block / Unblock Rider"
         val mQrLinks = "📱 QR Code & Social Links"
@@ -2407,104 +2530,47 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             isChecked = updateEnabledFlag
         }
 
+        val minVerEt = EditText(ctx).apply {
+            hint = "Required Version Code (Current: $currentAppVersionCode)"
+            setText(requiredMinVersionCode.toString())
+            inputType = InputType.TYPE_CLASS_NUMBER
+        }
+
         val delayEt = EditText(ctx).apply {
             hint = "Delay Hours (e.g. 24 or 0 for instant)"
             setText(updateDelayHours.toString())
             inputType = InputType.TYPE_CLASS_NUMBER
         }
 
-        val tgLinkEt = EditText(ctx).apply {
-            hint = "Telegram Channel Link"
-            setText(tgUrl.ifBlank { "https://t.me/captain_smart_pro" })
+        val updTgEt = EditText(ctx).apply {
+            hint = "Update Telegram Link"
+            setText(updateTelegramUrl.ifBlank { tgUrl })
         }
 
-        val statusInfoTv = TextView(ctx).apply {
-            val ready = isNewUpdateReadyNow()
-            text = if (!updateEnabledFlag) {
-                "Status: OFF (Trial mode — Rider sees App Not Updated)"
-            } else if (ready) {
-                "Status: READY NOW (Rider goes to Telegram link)"
-            } else {
-                "Status: WAITING (${getUpdateRemainingHoursText()})"
-            }
-            textSize = 12f
-            setPadding(0, 10, 0, 10)
-        }
-
-        val start24hBtn = Button(ctx).apply {
-            text = "⏱️ Start 24h Timer From Now (ON)"
-            setOnClickListener {
-                enableSw.isChecked = true
-                delayEt.setText("24")
-                val now = System.currentTimeMillis()
-                updateEnabledFlag = true
-                updateDelayHours = 24L
-                updateReleasedAtMillis = now
-                tgUrl = tgLinkEt.text.toString().trim().ifEmpty { "https://t.me/captain_smart_pro" }
-                prefs.edit()
-                    .putBoolean("app_update_enabled", true)
-                    .putLong("app_update_delay_hours", 24L)
-                    .putLong("app_update_released_at", now)
-                    .putString("social_tg", tgUrl)
-                    .apply()
-                try {
-                    FirebaseDatabase.getInstance().reference
-                        .child("captain_smart_pro")
-                        .child("config")
-                        .updateChildren(
-                            mapOf(
-                                "updateEnabled" to true,
-                                "updateDelayHours" to 24L,
-                                "updateReleasedAt" to now,
-                                "telegram" to tgUrl
-                            )
-                        )
-                } catch (_: Exception) {
-                }
-                statusInfoTv.text = "Status: WAITING (${getUpdateRemainingHoursText()})"
-                Toast.makeText(ctx, "24-hour update timer started", Toast.LENGTH_LONG).show()
-            }
-        }
-
-        val turnOffBtn = Button(ctx).apply {
-            text = "⛔ Turn OFF Update (Safe Trial Mode)"
-            setOnClickListener {
-                enableSw.isChecked = false
-                updateEnabledFlag = false
-                prefs.edit()
-                    .putBoolean("app_update_enabled", false)
-                    .apply()
-                try {
-                    FirebaseDatabase.getInstance().reference
-                        .child("captain_smart_pro")
-                        .child("config")
-                        .child("updateEnabled")
-                        .setValue(false)
-                } catch (_: Exception) {
-                }
-                statusInfoTv.text = "Status: OFF (Trial mode — Rider sees App Not Updated)"
-                Toast.makeText(ctx, "App Update turned OFF for safe trial", Toast.LENGTH_LONG).show()
-            }
+        val updWaGrpEt = EditText(ctx).apply {
+            hint = "Update WhatsApp Group Link"
+            setText(updateWhatsappGroupUrl)
         }
 
         box.addView(enableSw)
-        box.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
-        box.addView(TextView(ctx).apply { text = "Wait Hours Before Showing Update (Default 24):" })
+        box.addView(TextView(ctx).apply { text = "Min Version Code:" })
+        box.addView(minVerEt)
+        box.addView(TextView(ctx).apply { text = "Wait Hours Before Lock (0 = Now):" })
         box.addView(delayEt)
-        box.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
-        box.addView(TextView(ctx).apply { text = "Telegram Channel Link:" })
-        box.addView(tgLinkEt)
-        box.addView(statusInfoTv)
-        box.addView(start24hBtn)
-        box.addView(turnOffBtn)
+        box.addView(TextView(ctx).apply { text = "Update Telegram Link:" })
+        box.addView(updTgEt)
+        box.addView(TextView(ctx).apply { text = "Update WhatsApp Group Link:" })
+        box.addView(updWaGrpEt)
 
         AlertDialog.Builder(ctx)
-            .setTitle("🔄 App Update Control (24h / OFF / ON)")
+            .setTitle("🔄 App Update Control & Links")
             .setView(box)
             .setPositiveButton("Save Settings") { _, _ ->
                 val newEnabled = enableSw.isChecked
+                val newMinVer = minVerEt.text.toString().trim().toIntOrNull() ?: requiredMinVersionCode
                 val newDelay = delayEt.text.toString().trim().toLongOrNull()?.coerceAtLeast(0L) ?: 24L
-                val newTg = tgLinkEt.text.toString().trim().ifEmpty { "https://t.me/captain_smart_pro" }
+                val newUpdTg = updTgEt.text.toString().trim()
+                val newUpdWaGrp = updWaGrpEt.text.toString().trim()
                 val now = System.currentTimeMillis()
                 val newReleasedAt = if (newEnabled && (!updateEnabledFlag || updateReleasedAtMillis <= 0L)) {
                     now
@@ -2513,15 +2579,21 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 }
 
                 updateEnabledFlag = newEnabled
+                requiredMinVersionCode = newMinVer
                 updateDelayHours = newDelay
                 updateReleasedAtMillis = newReleasedAt
-                tgUrl = newTg
+                updateDeadlineMillis = if (newDelay <= 0L) 0L else (now + TimeUnit.HOURS.toMillis(newDelay))
+                updateTelegramUrl = newUpdTg
+                updateWhatsappGroupUrl = newUpdWaGrp
 
                 prefs.edit()
                     .putBoolean("app_update_enabled", updateEnabledFlag)
+                    .putInt("req_min_ver", requiredMinVersionCode)
                     .putLong("app_update_delay_hours", updateDelayHours)
                     .putLong("app_update_released_at", updateReleasedAtMillis)
-                    .putString("social_tg", tgUrl)
+                    .putLong("upd_deadline", updateDeadlineMillis)
+                    .putString("upd_tg_url", updateTelegramUrl)
+                    .putString("upd_wa_group_url", updateWhatsappGroupUrl)
                     .apply()
 
                 try {
@@ -2531,9 +2603,12 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                         .updateChildren(
                             mapOf(
                                 "updateEnabled" to updateEnabledFlag,
+                                "reqMinVer" to requiredMinVersionCode,
                                 "updateDelayHours" to updateDelayHours,
                                 "updateReleasedAt" to updateReleasedAtMillis,
-                                "telegram" to tgUrl
+                                "updDeadline" to updateDeadlineMillis,
+                                "updTgUrl" to updateTelegramUrl,
+                                "updWaGroupUrl" to updateWhatsappGroupUrl
                             )
                         )
                 } catch (_: Exception) {
@@ -2561,10 +2636,18 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
     private fun openSingleRiderActionsDialog(ctx: Context, entry: RiderEntry, refreshList: () -> Unit) {
         val vLabel = VehicleCategory.safeLabel(entry.vehicleTypeKey)
         val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
-        val locText = if (hasCoords) {
-            "Live (${entry.movementStatus}): ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
+        val locText = if (entry.isOnline) {
+            if (hasCoords) {
+                "ONLINE • $vLabel • ${entry.movementStatus}: ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
+            } else {
+                "ONLINE • $vLabel • ${entry.movementStatus} (Waiting GPS)"
+            }
         } else {
-            "Live Location: Waiting for GPS"
+            if (hasCoords) {
+                "OFFLINE • $vLabel • Last Location: ${String.format(Locale.US, "%.5f", entry.lat)}, ${String.format(Locale.US, "%.5f", entry.lng)}"
+            } else {
+                "OFFLINE • $vLabel • Last Location: N/A"
+            }
         }
 
         val options = arrayOf(
@@ -2629,6 +2712,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
     }
 
     private fun openBlockRiderDialog(ctx: Context, defaultRiderId: String) {
+        val cleanId = cleanRiderId(defaultRiderId)
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -2636,11 +2720,11 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         }
         val riderIdEt = EditText(ctx).apply {
             hint = "Rider Mobile Number (ID)"
-            setText(defaultRiderId)
+            setText(cleanId)
         }
         val blockSw = Switch(ctx).apply {
             text = "Block Rider Access"
-            isChecked = prefs.getBoolean("blocked_${defaultRiderId.trim()}", false)
+            isChecked = prefs.getBoolean("blocked_$cleanId", false)
         }
         box.addView(TextView(ctx).apply { text = "Rider ID (Mobile Number):" })
         box.addView(riderIdEt)
@@ -2651,7 +2735,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             .setTitle("🛡️ Block / Unblock Rider")
             .setView(box)
             .setPositiveButton("Apply") { _, _ ->
-                val targetId = riderIdEt.text.toString().trim()
+                val targetId = cleanRiderId(riderIdEt.text.toString().trim())
                 if (targetId.isEmpty()) return@setPositiveButton
                 val blocked = blockSw.isChecked
                 prefs.edit().putBoolean("blocked_$targetId", blocked).apply()
@@ -2695,6 +2779,10 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             setText(plan3MonthPrice.toString())
             inputType = InputType.TYPE_CLASS_NUMBER
         }
+        val sbiEt = EditText(ctx).apply {
+            hint = "SBI UPI ID (e.g. 9954681428@sbi)"
+            setText(sbiUpiId)
+        }
 
         box.addView(TextView(ctx).apply { text = "1 Month Plan (₹):" })
         box.addView(p1Et)
@@ -2702,19 +2790,23 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         box.addView(p2Et)
         box.addView(TextView(ctx).apply { text = "3 Months Plan (₹):" })
         box.addView(p3Et)
+        box.addView(TextView(ctx).apply { text = "SBI UPI ID:" })
+        box.addView(sbiEt)
 
         AlertDialog.Builder(ctx)
-            .setTitle("🏷️ Subscription Plan Prices")
+            .setTitle("🏷️ Plan Prices & SBI UPI")
             .setView(box)
             .setPositiveButton("Save Prices") { _, _ ->
                 plan1MonthPrice = p1Et.text.toString().trim().toIntOrNull() ?: 49
                 plan2MonthPrice = p2Et.text.toString().trim().toIntOrNull() ?: 70
                 plan3MonthPrice = p3Et.text.toString().trim().toIntOrNull() ?: 99
+                sbiUpiId = sbiEt.text.toString().trim().ifEmpty { "9954681428@sbi" }
 
                 prefs.edit()
                     .putInt("plan_1m_price", plan1MonthPrice)
                     .putInt("plan_2m_price", plan2MonthPrice)
                     .putInt("plan_3m_price", plan3MonthPrice)
+                    .putString("sbi_upi_id", sbiUpiId)
                     .apply()
 
                 try {
@@ -2725,14 +2817,15 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                             mapOf(
                                 "plan1m" to plan1MonthPrice,
                                 "plan2m" to plan2MonthPrice,
-                                "plan3m" to plan3MonthPrice
+                                "plan3m" to plan3MonthPrice,
+                                "sbiUpiId" to sbiUpiId
                             )
                         )
                 } catch (_: Exception) {
                 }
                 Toast.makeText(
                     ctx,
-                    "Saved: 1M ₹$plan1MonthPrice | 2M ₹$plan2MonthPrice | 3M ₹$plan3MonthPrice",
+                    "Saved: 1M ₹$plan1MonthPrice | 2M ₹$plan2MonthPrice | 3M ₹$plan3MonthPrice | SBI: $sbiUpiId",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -2778,16 +2871,24 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     .addOnSuccessListener { snap ->
                         allEntries.clear()
                         for (child in snap.children) {
-                            val rId = child.child("riderId").getValue(String::class.java) ?: (child.key ?: "")
+                            val rId = cleanRiderId(child.child("riderId").getValue(String::class.java) ?: (child.key ?: ""))
                             val name = child.child("fullName").getValue(String::class.java) ?: "Unknown"
-                            val mobile = child.child("mobile").getValue(String::class.java) ?: rId
+                            val mobile = cleanRiderId(child.child("mobile").getValue(String::class.java) ?: rId)
                             val vehicleTypeKey = child.child("vehicleType").getValue(String::class.java)
                             val photoB64 = child.child("photoB64").getValue(String::class.java) ?: ""
                             val lastSeen = child.child("lastSeen").getValue(Long::class.java) ?: 0L
                             val isOnline = (child.child("online").getValue(Boolean::class.java) ?: false) &&
                                 ((now - lastSeen) < TimeUnit.MINUTES.toMillis(15))
-                            val lat = child.child("lat").getValue(Double::class.java)
-                            val lng = child.child("lng").getValue(Double::class.java)
+                            val lat = if (isOnline) {
+                                child.child("lat").getValue(Double::class.java)
+                            } else {
+                                child.child("lastLat").getValue(Double::class.java) ?: child.child("lat").getValue(Double::class.java)
+                            }
+                            val lng = if (isOnline) {
+                                child.child("lng").getValue(Double::class.java)
+                            } else {
+                                child.child("lastLng").getValue(Double::class.java) ?: child.child("lng").getValue(Double::class.java)
+                            }
                             val locTime = child.child("locationUpdatedAt").getValue(Long::class.java) ?: 0L
                             val moveStatus = child.child("movementStatus").getValue(String::class.java) ?: "Live"
                             val trialStart = child.child("trialStart").getValue(Long::class.java) ?: 0L
@@ -2843,10 +2944,18 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     layoutParams = LinearLayout.LayoutParams(62, 62).apply { rightMargin = 10 }
                 }
                 val hasCoords = entry.lat != null && entry.lng != null && (entry.lat != 0.0 || entry.lng != 0.0)
-                val locInfo = if (hasCoords) {
-                    "\nLive (${entry.movementStatus}): ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
+                val locInfo = if (entry.isOnline) {
+                    if (hasCoords) {
+                        "\nLive (${entry.movementStatus}): ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
+                    } else {
+                        "\nLive (${entry.movementStatus}): Waiting for GPS"
+                    }
                 } else {
-                    "\nLive Location: Waiting for GPS"
+                    if (hasCoords) {
+                        "\nLast Location: ${String.format(Locale.US, "%.4f", entry.lat)}, ${String.format(Locale.US, "%.4f", entry.lng)}"
+                    } else {
+                        "\nLast Location: N/A"
+                    }
                 }
                 val detailsTv = TextView(ctx).apply {
                     text = "${entry.name} (${entry.mobile})\nVehicle: $vLabel • ${entry.remainingDays} days left • ${if (entry.isOnline) "ONLINE" else "OFFLINE"}$locInfo"
@@ -2878,6 +2987,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
     private var renderEntries: (String) -> Unit = {}
 
     private fun openSubscriptionManagerDialog(ctx: Context, defaultRiderId: String) {
+        val cleanId = cleanRiderId(defaultRiderId)
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -2885,7 +2995,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         }
         val riderIdEt = EditText(ctx).apply {
             hint = "Rider Mobile Number (ID)"
-            setText(defaultRiderId)
+            setText(cleanId)
         }
         val daysEt = EditText(ctx).apply {
             hint = "Days (e.g. 30, 60, 90, 7, -5)"
@@ -2901,7 +3011,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             .setTitle("💳 Subscription Manager")
             .setView(box)
             .setPositiveButton("Approve & Apply") { _, _ ->
-                val targetId = riderIdEt.text.toString().trim()
+                val targetId = cleanRiderId(riderIdEt.text.toString().trim())
                 val days = daysEt.text.toString().trim().toLongOrNull() ?: 0L
                 val newUntil = (System.currentTimeMillis() + TimeUnit.DAYS.toMillis(days)).coerceAtLeast(0L)
                 prefs.edit().putLong("active_until_$targetId", newUntil).apply()
@@ -2923,6 +3033,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
     }
 
     private fun openTrialManagerDialog(ctx: Context, defaultRiderId: String) {
+        val cleanId = cleanRiderId(defaultRiderId)
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -2930,7 +3041,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         }
         val riderIdEt = EditText(ctx).apply {
             hint = "Rider ID (Mobile Number)"
-            setText(defaultRiderId)
+            setText(cleanId)
         }
         val trialEt = EditText(ctx).apply {
             hint = "Free Trial Days (e.g. 30, 7, 3)"
@@ -2947,7 +3058,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             .setView(box)
             .setPositiveButton("Save") { _, _ ->
                 val tDays = trialEt.text.toString().trim().toLongOrNull() ?: 30L
-                val targetId = riderIdEt.text.toString().trim()
+                val targetId = cleanRiderId(riderIdEt.text.toString().trim())
                 configurableTrialDays = tDays.coerceAtLeast(0L)
                 prefs.edit().putLong("trial_days_global", configurableTrialDays).apply()
                 try {
@@ -2965,6 +3076,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
     }
 
     private fun openAdminRiderChatDialog(ctx: Context, defaultRiderId: String) {
+        val cleanDefaultId = cleanRiderId(defaultRiderId)
         val scroll = ScrollView(ctx)
         val box = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -2972,7 +3084,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         }
         val riderIdEt = EditText(ctx).apply {
             hint = "Rider Mobile Number (ID)"
-            setText(defaultRiderId)
+            setText(cleanDefaultId)
         }
         val messagesBox = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
@@ -2985,7 +3097,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         var activeListener: ValueEventListener? = null
         var activeRefPath: String? = null
 
-        fun attachLiveChatListener(targetId: String) {
+        fun attachLiveChatListener(rawId: String) {
+            val targetId = cleanRiderId(rawId)
             if (targetId.isBlank()) return
             try {
                 val dbRef = FirebaseDatabase.getInstance().reference
@@ -3045,7 +3158,6 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                             }
                         }
                     }
-
                     override fun onCancelled(error: DatabaseError) {}
                 }
                 activeListener = listener
@@ -3054,16 +3166,16 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             }
         }
 
-        attachLiveChatListener(defaultRiderId)
+        attachLiveChatListener(cleanDefaultId)
 
         callBtn.setOnClickListener {
-            val num = riderIdEt.text.toString().trim()
+            val num = cleanRiderId(riderIdEt.text.toString().trim())
             if (num.isEmpty()) Toast.makeText(ctx, "Enter Rider Mobile ID", Toast.LENGTH_SHORT).show()
             else ctx.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$num")))
         }
 
         sendBtn.setOnClickListener {
-            val targetId = riderIdEt.text.toString().trim()
+            val targetId = cleanRiderId(riderIdEt.text.toString().trim())
             val txt = msgEt.text.toString().trim()
             if (targetId.isEmpty() || txt.isEmpty()) return@setOnClickListener
             attachLiveChatListener(targetId)
@@ -3102,10 +3214,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             .setView(scroll)
             .setOnDismissListener {
                 if (activeListener != null && activeRefPath != null) {
-                    try {
-                        FirebaseDatabase.getInstance().reference.child(activeRefPath!!).removeEventListener(activeListener!!)
-                    } catch (_: Exception) {
-                    }
+                    try { FirebaseDatabase.getInstance().reference.child(activeRefPath!!).removeEventListener(activeListener!!) }
+                    catch (_: Exception) {}
                 }
             }
             .setNegativeButton("Close", null)
@@ -3144,22 +3254,13 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             }
         }
 
-        val fbEt = EditText(ctx).apply {
-            hint = "Facebook Link"
-            setText(fbUrl)
-        }
-        val waEt = EditText(ctx).apply {
-            hint = "WhatsApp Link"
-            setText(waUrl)
-        }
+        val fbEt = EditText(ctx).apply { hint = "Facebook Link"; setText(fbUrl) }
+        val waEt = EditText(ctx).apply { hint = "WhatsApp Link"; setText(waUrl) }
         val tgEt = EditText(ctx).apply {
             hint = "Telegram Channel Link"
             setText(tgUrl.ifBlank { "https://t.me/captain_smart_pro" })
         }
-        val ytEt = EditText(ctx).apply {
-            hint = "YouTube Link"
-            setText(ytUrl)
-        }
+        val ytEt = EditText(ctx).apply { hint = "YouTube Link"; setText(ytUrl) }
 
         box.addView(qrTitleEt)
         box.addView(qrPreview)
@@ -3171,7 +3272,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         box.addView(Button(ctx).apply {
             text = "💾 Save QR & Social Links"
             setOnClickListener {
-                customQrTitle = qrTitleEt.text.toString().trim().ifEmpty { "Rider Payment QR" }
+                customQrTitle = qrTitleEt.text.toString().trim().ifEmpty { "SBI / Rider Payment QR" }
                 customQrBase64 = tempQrB64
                 fbUrl = fbEt.text.toString().trim()
                 waUrl = waEt.text.toString().trim()
@@ -3215,7 +3316,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             .show()
     }
 
-    private fun openRiderLiveChatDialog(ctx: Context, riderId: String, riderName: String) {
+    private fun openRiderLiveChatDialog(ctx: Context, rawRiderId: String, riderName: String) {
+        val riderId = cleanRiderId(rawRiderId)
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         var attachPhotoB64 = ""
 
@@ -3269,6 +3371,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                         chatRef.child(key).setValue(
                             mapOf(
                                 "sender" to "$riderName ($riderId)",
+                                "riderId" to riderId,
                                 "message" to txt,
                                 "photoB64" to attachPhotoB64,
                                 "time" to System.currentTimeMillis()
@@ -3418,7 +3521,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
     }
 
     private fun showPaymentLockScreen(ctx: Context, riderId: String, riderName: String) {
-        var selectedPlanLabel = "1 Month (₹$plan1MonthPrice)"
+        var selectedPlanLabel = "1 Month"
+        var selectedPlanAmount = plan1MonthPrice
 
         val scroll = ScrollView(ctx).apply {
             setBackgroundColor(bgDark)
@@ -3445,41 +3549,47 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 
         val planCard = makeCard(ctx, cardDark, borderSlate)
         planCard.addView(TextView(ctx).apply {
-            text = tr("🏷️ Select Subscription Plan", "🏷️ सब्सक्रिप्शन प्लान चुनें", "🏷️ ছাবস্ক্ৰিপচন প্লেন বাছনি কৰক")
+            text = tr("🏷️ Select Subscription Plan (UPI / SBI)", "🏷️ प्लान चुनें और UPI / SBI से पेमेंट करें", "🏷️ প্লেন বাছনি কৰক আৰু UPI / SBI পেমেণ্ট কৰক")
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
             setPadding(0, 0, 0, 8)
         })
         val selectedPlanTv = TextView(ctx).apply {
-            text = "Selected: $selectedPlanLabel"
+            text = "Selected: $selectedPlanLabel (₹$selectedPlanAmount) • SBI UPI: $sbiUpiId"
             textSize = 12f
             setTextColor(accentGreenBright)
             setPadding(0, 0, 0, 10)
         }
         planCard.addView(selectedPlanTv)
 
-        planCard.addView(makeStyledButton(ctx, "1 Month — ₹$plan1MonthPrice", accentBlue).apply {
+        planCard.addView(makeStyledButton(ctx, "1 Month — ₹$plan1MonthPrice (Open UPI)", accentBlue).apply {
             textSize = 12f
             setOnClickListener {
-                selectedPlanLabel = "1 Month (₹$plan1MonthPrice)"
-                selectedPlanTv.text = "Selected: $selectedPlanLabel"
+                selectedPlanLabel = "1 Month"
+                selectedPlanAmount = plan1MonthPrice
+                selectedPlanTv.text = "Selected: $selectedPlanLabel (₹$selectedPlanAmount) • SBI UPI: $sbiUpiId"
+                launchUpiAppIntent(ctx, selectedPlanAmount, selectedPlanLabel, riderId)
             }
         })
         planCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
-        planCard.addView(makeStyledButton(ctx, "2 Months — ₹$plan2MonthPrice", accentPurple).apply {
+        planCard.addView(makeStyledButton(ctx, "2 Months — ₹$plan2MonthPrice (Open UPI)", accentPurple).apply {
             textSize = 12f
             setOnClickListener {
-                selectedPlanLabel = "2 Months (₹$plan2MonthPrice)"
-                selectedPlanTv.text = "Selected: $selectedPlanLabel"
+                selectedPlanLabel = "2 Months"
+                selectedPlanAmount = plan2MonthPrice
+                selectedPlanTv.text = "Selected: $selectedPlanLabel (₹$selectedPlanAmount) • SBI UPI: $sbiUpiId"
+                launchUpiAppIntent(ctx, selectedPlanAmount, selectedPlanLabel, riderId)
             }
         })
         planCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 8) })
-        planCard.addView(makeStyledButton(ctx, "3 Months — ₹$plan3MonthPrice", accentTeal).apply {
+        planCard.addView(makeStyledButton(ctx, "3 Months — ₹$plan3MonthPrice (Open UPI)", accentTeal).apply {
             textSize = 12f
             setOnClickListener {
-                selectedPlanLabel = "3 Months (₹$plan3MonthPrice)"
-                selectedPlanTv.text = "Selected: $selectedPlanLabel"
+                selectedPlanLabel = "3 Months"
+                selectedPlanAmount = plan3MonthPrice
+                selectedPlanTv.text = "Selected: $selectedPlanLabel (₹$selectedPlanAmount) • SBI UPI: $sbiUpiId"
+                launchUpiAppIntent(ctx, selectedPlanAmount, selectedPlanLabel, riderId)
             }
         })
         col.addView(planCard)
@@ -3488,8 +3598,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             gravity = Gravity.CENTER_HORIZONTAL
         }
         payCard.addView(TextView(ctx).apply {
-            text = "$riderName ($riderId)"
-            textSize = 14f
+            text = "$riderName ($riderId)\nSBI UPI: $sbiUpiId"
+            textSize = 13f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
             gravity = Gravity.CENTER
@@ -3504,7 +3614,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         })
         payCard.addView(ImageView(ctx).apply {
             val uploadedQr = decodeBase64Bitmap(customQrBase64)
-            setImageBitmap(uploadedQr ?: generateQrMatrix(customQrTitle))
+            setImageBitmap(uploadedQr ?: generateQrMatrix("$sbiUpiId|$customQrTitle"))
             layoutParams = LinearLayout.LayoutParams(320, 320).apply {
                 gravity = Gravity.CENTER_HORIZONTAL
             }
@@ -3526,7 +3636,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                             mapOf(
                                 "riderId" to riderId,
                                 "riderName" to riderName,
-                                "planLabel" to selectedPlanLabel,
+                                "planLabel" to "$selectedPlanLabel (₹$selectedPlanAmount)",
+                                "sbiUpiId" to sbiUpiId,
                                 "status" to "PENDING_APPROVAL",
                                 "time" to System.currentTimeMillis()
                             )
@@ -3580,7 +3691,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         )
     }
 
-    private fun showRiderDashboard(ctx: Context, riderId: String, riderName: String) {
+    private fun showRiderDashboard(ctx: Context, rawRiderId: String, riderName: String) {
+        val riderId = cleanRiderId(rawRiderId)
         val prefs = ctx.getSharedPreferences("captain_smart_pro_state", Context.MODE_PRIVATE)
         val pickupDef = prefs.getString("pickup_km", "1.0") ?: "1.0"
         val pickupLimitDef = prefs.getBoolean("pickup_limit_on", true)
@@ -3593,7 +3705,15 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 
         val totalRides = prefs.getInt("total_rides", 0)
         val totalEarnings = prefs.getInt("total_earnings", 0)
-        val dailyTarget = prefs.getInt("daily_target_rs", 500)
+        val targetAmt = dailyTargetRs
+
+        if (totalEarnings >= targetAmt) {
+            Toast.makeText(
+                ctx,
+                "🎉 Congratulations! Daily Target ₹$targetAmt completed! Keep taking rides.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
 
         var isEngineActivated = false
         var isAutoAcceptEnabled = false
@@ -3670,7 +3790,6 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         val homeScroll = ScrollView(ctx).apply { setPadding(18, 14, 18, 116) }
         val homeLayout = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
 
-        // Classic Dark Gold Stats Strip
         val statsStrip = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -3698,7 +3817,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f)
         })
         statsStrip.addView(TextView(ctx).apply {
-            text = "Target: ₹$dailyTarget"
+            text = if (totalEarnings >= targetAmt) "Target: ₹$targetAmt 🎉" else "Target: ₹$targetAmt"
             textSize = 11f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -3836,29 +3955,17 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         swPickupLimit.setOnCheckedChangeListener { _, isChecked ->
             updateStatusPillBadge(badgePickup, isChecked)
             refreshRulesSummary()
-            if (isChecked) {
-                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा पिकअप ON")
-            } else {
-                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा पिकअप OFF")
-            }
+            speakText(ctx, swSoundTts.isChecked, if (isChecked) "दूरी/किराया सीमा पिकअप ON" else "दूरी/किराया सीमा पिकअप OFF")
         }
         swDropLimit.setOnCheckedChangeListener { _, isChecked ->
             updateStatusPillBadge(badgeDrop, isChecked)
             refreshRulesSummary()
-            if (isChecked) {
-                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा ड्रॉप ON")
-            } else {
-                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा ड्रॉप OFF")
-            }
+            speakText(ctx, swSoundTts.isChecked, if (isChecked) "दूरी/किराया सीमा ड्रॉप ON" else "दूरी/किराया सीमा ड्रॉप OFF")
         }
         swFareLimit.setOnCheckedChangeListener { _, isChecked ->
             updateStatusPillBadge(badgeFare, isChecked)
             refreshRulesSummary()
-            if (isChecked) {
-                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा किराया ON")
-            } else {
-                speakText(ctx, swSoundTts.isChecked, "दूरी/किराया सीमा किराया OFF")
-            }
+            speakText(ctx, swSoundTts.isChecked, if (isChecked) "दूरी/किराया सीमा किराया ON" else "दूरी/किराया सीमा किराया OFF")
         }
         swAiHelp.setOnCheckedChangeListener { _, isChecked ->
             updateStatusPillBadge(badgeAiHelp, isChecked)
@@ -3975,9 +4082,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 when (item.title.toString()) {
                     actLabel -> {
                         if (!isEngineActivated) {
-                            requireLocationAndGpsForEngine(ctx) {
-                                activateEngineNow()
-                            }
+                            requireLocationAndGpsForEngine(ctx) { activateEngineNow() }
                         } else {
                             isEngineActivated = false
                             isAutoAcceptEnabled = false
@@ -3987,7 +4092,6 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                             fleetStateTv.text = tr("⏸️ Standby (Deactivated)", "⏸️ स्टैंडबाय", "⏸️ ষ্টেণ্ডবাই")
                             fleetStateTv.setTextColor(Color.parseColor("#F87171"))
                             speakText(ctx, swSoundTts.isChecked, tr("Engine deactivated", "इंजन बंद हो गया है", "ইঞ্জিন বন্ধ হৈছে"))
-                            Toast.makeText(ctx, tr("Engine Deactivated", "इंजन बंद", "ইঞ্জিন বন্ধ হ'ল"), Toast.LENGTH_SHORT).show()
                         }
                     }
                     accLabel -> openAccessibilityScreen(ctx)
@@ -4023,9 +4127,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 rightMargin = 6
             }
-            setOnClickListener {
-                shareRiderLiveLocationWithFamily(ctx, riderName, riderId)
-            }
+            setOnClickListener { shareRiderLiveLocationWithFamily(ctx, riderName, riderId) }
         }
 
         val parcelToggleBtn = makeStyledButton(
@@ -4048,12 +4150,10 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     text = tr("📦 PARCEL: ON (Parcel Only)", "📦 पार्सल: ON (केवल पार्सल)", "📦 পাৰ্চেল: ON (কেৱল পাৰ্চেল)")
                     background = make3dPill(accentGreen, accentGold, 16f)
                     speakSwitchState(ctx, swSoundTts.isChecked, tr("Parcel mode", "पार्सल मोड", "পাৰ্চেল মোড"), true)
-                    Toast.makeText(ctx, tr("Parcel ON • Only Parcel Accepted", "पार्सल ON • केवल पार्सल एक्सेप्ट होगा", "পাৰ্চেল ON • কেৱল পাৰ্চেল গ্ৰহণ হ'ব"), Toast.LENGTH_SHORT).show()
                 } else {
                     text = tr("📦 PARCEL: OFF", "📦 पार्सल: OFF", "📦 পাৰ্চেল: OFF")
                     background = make3dPill(accentPurple, accentGold, 16f)
                     speakSwitchState(ctx, swSoundTts.isChecked, tr("Parcel mode", "पार्सल मोड", "পাৰ্চেল মোড"), false)
-                    Toast.makeText(ctx, tr("Parcel OFF", "पार्सल OFF", "পাৰ্চেল OFF"), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -4071,11 +4171,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 
         val rulesCard = makeCard(ctx, cardDark, borderSlate)
         rulesCard.addView(TextView(ctx).apply {
-            text = tr(
-                "🎯 Rider Ride Rules (On/Off Per Filter)",
-                "🎯 राइडर नियम (हर फ़िल्टर On/Off)",
-                "🎯 ৰাইডাৰ নিয়ম (প্ৰতিটো ফিল্টাৰ On/Off)"
-            )
+            text = tr("🎯 Rider Ride Rules (On/Off Per Filter)", "🎯 राइडर नियम (हर फ़िल्टर On/Off)", "🎯 ৰাইডাৰ নিয়ম (প্ৰতিটো ফিল্টাৰ On/Off)")
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
             setTextColor(textWhite)
@@ -4091,11 +4187,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             ).apply { bottomMargin = 12 }
         }
 
-        val openRideModeBtn = makeStyledButton(
-            ctx,
-            "⚡ Open Ride Mode",
-            cardElevated
-        ).apply {
+        val openRideModeBtn = makeStyledButton(ctx, "⚡ Open Ride Mode", cardElevated).apply {
             textSize = 11f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 rightMargin = 6
@@ -4110,11 +4202,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                     .putBoolean("drop_limit_on", false)
                     .putBoolean("fare_limit_on", false)
                     .apply()
-                Toast.makeText(
-                    ctx,
-                    "Open Ride Mode • सभी दूरी/किराया सीमाएँ (Pickup, Drop, Fare) OFF",
-                    Toast.LENGTH_LONG
-                ).show()
+                Toast.makeText(ctx, "Open Ride Mode • सभी दूरी/किराया सीमाएँ (Pickup, Drop, Fare) OFF", Toast.LENGTH_LONG).show()
                 speakText(ctx, swSoundTts.isChecked, "सभी दूरी/किराया सीमाएँ (Pickup, Drop, Fare) OFF")
             }
         }
@@ -4123,18 +4211,10 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
         lateinit var aiHelpMicBtn: Button
         fun refreshAiButtonLabel() {
             val left = getAiQuestionsRemainingToday(ctx, riderId)
-            aiHelpMicBtn.text = tr(
-                "🎙️ AI HELP ($left/3)",
-                "🎙️ AI मदद ($left/3)",
-                "🎙️ AI সহায় ($left/3)"
-            )
+            aiHelpMicBtn.text = tr("🎙️ AI HELP ($left/3)", "🎙️ AI मदद ($left/3)", "🎙️ AI সহায় ($left/3)")
         }
 
-        aiHelpMicBtn = makeStyledButton(
-            ctx,
-            "🎙️ AI HELP (${getAiQuestionsRemainingToday(ctx, riderId)}/3)",
-            accentBlue
-        ).apply {
+        aiHelpMicBtn = makeStyledButton(ctx, "🎙️ AI HELP (${getAiQuestionsRemainingToday(ctx, riderId)}/3)", accentBlue).apply {
             textSize = 11f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 leftMargin = 6
@@ -4204,73 +4284,29 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
                 })
                 addView(ImageView(ctx).apply {
                     setImageDrawable(createGlowingFeatureDrawable(glowIcon))
-                    layoutParams = LinearLayout.LayoutParams(54, 54).apply {
-                        rightMargin = 8
-                    }
+                    layoutParams = LinearLayout.LayoutParams(54, 54).apply { rightMargin = 8 }
                 })
                 addView(statusBadge)
                 addView(toggleSwitch)
             }
         }
 
-        rulesCard.addView(buildInlineEditableRuleRow(
-            tr("📍 Pickup (Km)", "📍 पिकअप (किमी)", "📍 পিকআপ (কিঃমিঃ)"),
-            pickupEt,
-            badgePickup,
-            swPickupLimit
-        ))
-        rulesCard.addView(buildInlineEditableRuleRow(
-            tr("🏁 Drop (Km)", "🏁 ड्रॉप (किमी)", "🏁 ড্ৰপ (কিঃমিঃ)"),
-            dropEt,
-            badgeDrop,
-            swDropLimit
-        ))
-        rulesCard.addView(buildInlineEditableRuleRow(
-            tr("💰 Fare / Max (₹)", "💰 किराया / मैक्स (₹)", "💰 ভাড়া / মেক্স (₹)"),
-            amountEt,
-            badgeFare,
-            swFareLimit
-        ))
+        rulesCard.addView(buildInlineEditableRuleRow(tr("📍 Pickup (Km)", "📍 पिकअप (किमी)", "📍 পিকআপ (কিঃমিঃ)"), pickupEt, badgePickup, swPickupLimit))
+        rulesCard.addView(buildInlineEditableRuleRow(tr("🏁 Drop (Km)", "🏁 ड्रॉप (किमी)", "🏁 ড্ৰপ (কিঃমিঃ)"), dropEt, badgeDrop, swDropLimit))
+        rulesCard.addView(buildInlineEditableRuleRow(tr("💰 Fare / Max (₹)", "💰 किराया / मैक्स (₹)", "💰 ভাড়া / মেক্স (₹)"), amountEt, badgeFare, swFareLimit))
 
-        rulesCard.addView(buildGlowingFeatureRow(
-            tr("🤖 AI Help", "🤖 AI हेल्प", "🤖 AI সহায়"),
-            GlowingFeatureIcon.AI_HELP,
-            badgeAiHelp,
-            swAiHelp
-        ))
-        rulesCard.addView(buildGlowingFeatureRow(
-            tr("⚡ Only Ola / Rapido", "⚡ केवल Ola / Rapido", "⚡ কেৱল Ola / Rapido"),
-            GlowingFeatureIcon.OLA_RAPIDO,
-            badgeOlaRapido,
-            swOnlyOlaRapido
-        ))
-        rulesCard.addView(buildGlowingFeatureRow(
-            tr("🔊 Play Sound / TTS", "🔊 आवाज़ / TTS चलाएं", "🔊 আৱাজ / TTS চলাওক"),
-            GlowingFeatureIcon.SOUND_TTS,
-            badgeSoundTts,
-            swSoundTts
-        ))
-        rulesCard.addView(buildGlowingFeatureRow(
-            tr("🎯 Auto Accept", "🎯 ऑटो एक्सेप्ट", "🎯 অটো এক্সেপ্ট"),
-            GlowingFeatureIcon.AUTO_ACCEPT,
-            badgeAutoAccept,
-            swAutoAccept
-        ))
-        rulesCard.addView(buildGlowingFeatureRow(
-            tr("📸 Screenshot Save to Gallery", "📸 स्क्रीनशॉट गैलरी में सेव करें", "📸 স্ক্ৰীণশ্বট গেলাৰীত ছেভ কৰক"),
-            GlowingFeatureIcon.SCREENSHOT,
-            badgeScreenshot,
-            swScreenshot
-        ))
+        rulesCard.addView(buildGlowingFeatureRow(tr("🤖 AI Help", "🤖 AI हेल्प", "🤖 AI সহায়"), GlowingFeatureIcon.AI_HELP, badgeAiHelp, swAiHelp))
+        rulesCard.addView(buildGlowingFeatureRow(tr("⚡ Only Ola / Rapido", "⚡ केवल Ola / Rapido", "⚡ কেৱল Ola / Rapido"), GlowingFeatureIcon.OLA_RAPIDO, badgeOlaRapido, swOnlyOlaRapido))
+        rulesCard.addView(buildGlowingFeatureRow(tr("🔊 Play Sound / TTS", "🔊 आवाज़ / TTS चलाएं", "🔊 আৱাজ / TTS চলাওক"), GlowingFeatureIcon.SOUND_TTS, badgeSoundTts, swSoundTts))
+        rulesCard.addView(buildGlowingFeatureRow(tr("🎯 Auto Accept", "🎯 ऑटो एक्सेप्ट", "🎯 অটো এক্সেপ্ট"), GlowingFeatureIcon.AUTO_ACCEPT, badgeAutoAccept, swAutoAccept))
+        rulesCard.addView(buildGlowingFeatureRow(tr("📸 Screenshot Save to Gallery", "📸 स्क्रीनशॉट गैलरी में सेव करें", "📸 স্ক্ৰীণশ্বট গেলাৰীত ছেভ কৰক"), GlowingFeatureIcon.SCREENSHOT, badgeScreenshot, swScreenshot))
 
         rulesCard.addView(View(ctx).apply { layoutParams = LinearLayout.LayoutParams(1, 4) })
         rulesCard.addView(makeStyledButton(
             ctx,
             tr("💾 SAVE RIDER PREFERENCES", "💾 राइडर सेटिंग्स सेव करें", "💾 ৰাইডাৰ ছেটিংছ ছেভ কৰক"),
             accentGreen
-        ).apply {
-            setOnClickListener { savePrefsAction() }
-        })
+        ).apply { setOnClickListener { savePrefsAction() } })
         homeLayout.addView(rulesCard)
 
         homeLayout.addView(buildCompactSocialLinksCard(ctx))
@@ -4345,11 +4381,8 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
             })
             setOnClickListener {
                 if (hasLink) {
-                    try {
-                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    } catch (_: Exception) {
-                        Toast.makeText(ctx, "Invalid $name link", Toast.LENGTH_SHORT).show()
-                    }
+                    try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    catch (_: Exception) { Toast.makeText(ctx, "Invalid $name link", Toast.LENGTH_SHORT).show() }
                 } else {
                     Toast.makeText(ctx, "$name link not set", Toast.LENGTH_SHORT).show()
                 }
@@ -4453,10 +4486,7 @@ Captain Smart Pro — ৰাইডাৰ ভাইসকলৰ আপোন স�
 
     override fun onDestroy() {
         stopLocationLoop()
-        try {
-            speechRecognizer?.destroy()
-        } catch (_: Exception) {
-        }
+        try { speechRecognizer?.destroy() } catch (_: Exception) {}
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()
